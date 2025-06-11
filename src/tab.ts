@@ -86,7 +86,7 @@ export class Tab {
       // on chromium, the download event is fired *after* page.goto rejects, so we wait a lil bit
       const download = await Promise.race([
         downloadEvent,
-        new Promise(resolve => setTimeout(resolve, process.platform === 'win32' ? 1000 : 500)),
+        new Promise(resolve => setTimeout(resolve, 1000)),
       ]);
       if (!download)
         throw e;
