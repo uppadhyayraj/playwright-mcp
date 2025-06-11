@@ -138,10 +138,16 @@ test('navigating to download link emits download', async ({ startClient, server,
     res.end('Hello world!');
   });
 
-  expect(await client.callTool({
+  const navigateResponse = await client.callTool({
     name: 'browser_navigate',
     arguments: {
       url: server.PREFIX + 'download',
     },
-  })).toContainTextContent('### Downloads');
+  });
+  if (process.platform === 'win32') {
+    // windows is racy, downloads might arrive after the snapshot
+    await expect.poll(() => client.callTool({ name: 'browser_snapshot' })).toContainTextContent('### Downloads');
+  } else {
+    expect(navigateResponse).toContainTextContent('### Downloads');
+  }
 });
