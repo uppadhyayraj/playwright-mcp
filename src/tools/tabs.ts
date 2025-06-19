@@ -50,9 +50,9 @@ const selectTab: ToolFactory = captureSnapshot => defineTool({
   schema: {
     name: 'browser_tab_select',
     title: 'Select a tab',
-    description: 'Select a tab by index',
+    description: 'Select a tab by index (1-based indexing)',
     inputSchema: z.object({
-      index: z.number().describe('The index of the tab to select'),
+      index: z.number().describe('The index of the tab to select (1-based: first tab is 1, second tab is 2, etc.)'),
     }),
     type: 'readOnly',
   },
@@ -108,7 +108,7 @@ const closeTab: ToolFactory = captureSnapshot => defineTool({
     title: 'Close a tab',
     description: 'Close a tab',
     inputSchema: z.object({
-      index: z.number().optional().describe('The index of the tab to close. Closes current tab if not provided.'),
+      index: z.number().optional().describe('The index of the tab to close (1-based: first tab is 1, second tab is 2, etc.). Closes current tab if not provided.'),
     }),
     type: 'destructive',
   },
