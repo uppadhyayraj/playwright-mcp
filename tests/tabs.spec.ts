@@ -90,12 +90,12 @@ test('select tab', async ({ client }) => {
   expect(await client.callTool({
     name: 'browser_tab_select',
     arguments: {
-      index: 2,
+      index: 1,
     },
   })).toHaveTextContent(`
 - Ran Playwright code:
 \`\`\`js
-// <internal code to select tab 2>
+// <internal code to select tab 1>
 \`\`\`
 
 ### Open tabs
@@ -118,12 +118,12 @@ test('close tab', async ({ client }) => {
   expect(await client.callTool({
     name: 'browser_tab_close',
     arguments: {
-      index: 3,
+      index: 2,
     },
   })).toHaveTextContent(`
 - Ran Playwright code:
 \`\`\`js
-// <internal code to close tab 3>
+// <internal code to close tab 2>
 \`\`\`
 
 ### Open tabs

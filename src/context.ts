@@ -101,7 +101,7 @@ export class Context {
   }
 
   async selectTab(index: number) {
-    this._currentTab = this._tabs[index - 1];
+    this._currentTab = this._tabs[index];
     await this._currentTab.page.bringToFront();
   }
 
@@ -127,7 +127,7 @@ export class Context {
   }
 
   async closeTab(index: number | undefined) {
-    const tab = index === undefined ? this._currentTab : this._tabs[index - 1];
+    const tab = index === undefined ? this._currentTab : this._tabs[index];
     await tab?.page.close();
     return await this.listTabsMarkdown();
   }
