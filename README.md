@@ -662,9 +662,9 @@ X Y coordinate space, based on the provided screenshot.
 
 - **browser_tab_select**
   - Title: Select a tab
-  - Description: Select a tab by index (0-based indexing)
+  - Description: Select a tab by index
   - Parameters:
-    - `index` (number): The index of the tab to select (0-based: first tab is 0, second tab is 1, etc.)
+    - `index` (number): The index of the tab to select
   - Read-only: **true**
 
 <!-- NOTE: This has been generated via update-readme.js -->
@@ -673,7 +673,7 @@ X Y coordinate space, based on the provided screenshot.
   - Title: Close a tab
   - Description: Close a tab
   - Parameters:
-    - `index` (number, optional): The index of the tab to close (0-based: first tab is 0, second tab is 1, etc.). Closes current tab if not provided.
+    - `index` (number, optional): The index of the tab to close. Closes current tab if not provided.
   - Read-only: **false**
 
 </details>
