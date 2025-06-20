@@ -121,7 +121,7 @@ export class Context {
       const title = await tab.title();
       const url = tab.page.url();
       const current = tab === this._currentTab ? ' (current)' : '';
-      lines.push(`- ${i + 1}:${current} [${title}] (${url})`);
+      lines.push(`- ${i}:${current} [${title}] (${url})`);
     }
     return lines.join('\n');
   }
