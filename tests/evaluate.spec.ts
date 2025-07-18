@@ -50,7 +50,7 @@ test('browser_evaluate (element)', async ({ client, server }) => {
   })).toContainTextContent(`- Result: "red"`);
 });
 
-test('browser_evaluate (error)', async ({ client, server, mcpBrowser }) => {
+test('browser_evaluate (error)', async ({ client, server }) => {
   expect(await client.callTool({
     name: 'browser_navigate',
     arguments: { url: server.HELLO_WORLD },
@@ -68,11 +68,5 @@ test('browser_evaluate (error)', async ({ client, server, mcpBrowser }) => {
   expect(result.isError).toBe(true);
 
   // Check that JavaScript error details are contained in the response
-  if (mcpBrowser === 'webkit') {
-    // Webkit has different error message format
-    expect(result.content?.[0].text).toContain('undefinedVariable is not defined');
-  } else {
-    // Chrome, Firefox, etc. include the Playwright evaluation context
-    expect(result.content?.[0].text).toContain('undefinedVariable is not defined');
-  }
+  expect(result.content?.[0].text).toContain('undefinedVariable is not defined');
 });
