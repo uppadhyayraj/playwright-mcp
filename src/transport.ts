@@ -127,11 +127,11 @@ export function startHttpTransport(httpServer: http.Server, mcpServer: Server) {
     JSON.stringify({
       'mcpServers': {
         'playwright': {
-          'url': `${url}/sse`
+          'url': `${url}/mcp`
         }
       }
     }, undefined, 2),
-    'If your client supports streamable HTTP, you can use the /mcp endpoint instead.',
+    'For legacy SSE transport support, you can use the /sse endpoint instead.',
   ].join('\n');
     // eslint-disable-next-line no-console
   console.error(message);
