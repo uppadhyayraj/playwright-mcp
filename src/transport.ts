@@ -115,10 +115,10 @@ export function startHttpTransport(httpServer: http.Server, mcpServer: Server) {
   const streamableSessions = new Map<string, StreamableHTTPServerTransport>();
   httpServer.on('request', async (req, res) => {
     const url = new URL(`http://localhost${req.url}`);
-    if (url.pathname.startsWith('/mcp'))
-      await handleStreamable(mcpServer, req, res, streamableSessions);
-    else
+    if (url.pathname.startsWith('/sse'))
       await handleSSE(mcpServer, req, res, url, sseSessions);
+    else
+      await handleStreamable(mcpServer, req, res, streamableSessions);
   });
   const url = httpAddressToString(httpServer.address());
   const message = [
