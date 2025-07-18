@@ -49,3 +49,25 @@ test('browser_evaluate (element)', async ({ client, server }) => {
     },
   })).toContainTextContent(`- Result: "red"`);
 });
+
+test('browser_evaluate (error)', async ({ client, server }) => {
+  expect(await client.callTool({
+    name: 'browser_navigate',
+    arguments: { url: server.HELLO_WORLD },
+  })).toContainTextContent(`- Page Title: Title`);
+
+  // Test with a bogus expression that will cause a JavaScript error
+  const result = await client.callTool({
+    name: 'browser_evaluate',
+    arguments: {
+      function: '() => { undefinedVariable.nonExistentMethod(); }',
+    },
+  });
+
+  // Check that error MCP response is returned
+  expect(result.isError).toBe(true);
+
+  // Check that JavaScript error details are contained in the response
+  expect(result.content?.[0].text).toContain('page._evaluateFunction');
+  expect(result.content?.[0].text).toContain('undefinedVariable is not defined');
+});
