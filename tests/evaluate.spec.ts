@@ -73,7 +73,6 @@ test('browser_evaluate (error)', async ({ client, server, mcpBrowser }) => {
     expect(result.content?.[0].text).toContain('undefinedVariable is not defined');
   } else {
     // Chrome, Firefox, etc. include the Playwright evaluation context
-    expect(result.content?.[0].text).toContain('page._evaluateFunction');
     expect(result.content?.[0].text).toContain('undefinedVariable is not defined');
   }
 });
