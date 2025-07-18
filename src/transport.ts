@@ -88,7 +88,14 @@ async function handleStreamable(server: Server, req: http.IncomingMessage, res: 
       if (transport.sessionId)
         sessions.delete(transport.sessionId);
     };
-    await server.createConnection(transport);
+    const connection = await server.createConnection(transport);
+    // Ensure connection is closed when transport closes
+    transport.onclose = () => {
+      if (transport.sessionId)
+        sessions.delete(transport.sessionId);
+      // eslint-disable-next-line no-console
+      void connection.close().catch(e => console.error(e));
+    };
     await transport.handleRequest(req, res);
     return;
   }
