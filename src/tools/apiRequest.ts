@@ -17,18 +17,35 @@ import { z } from 'zod';
 import { defineTool } from './tool.js';
 
 // Input schema for the API request tool
-const apiRequestInputSchema = z.object({
+const chainStepSchema = z.object({
+  name: z.string(),
   method: z.string().optional().default('GET'),
   url: z.string(),
   headers: z.record(z.string()).optional(),
   data: z.any().optional(),
   expect: z.object({
     status: z.number().optional(),
-    contentType: z.string().optional()
+    contentType: z.string().optional(),
+    body: z.any().optional(),
+    bodyRegex: z.string().optional()
   }).optional(),
-  // For response body validation
-  body: z.any().optional(), // partial/exact match for JSON or string
-  bodyRegex: z.string().optional() // regex for text or stringified JSON
+  extract: z.record(z.string()).optional() // { varName: 'field' }
+});
+
+const apiRequestInputSchema = z.object({
+  // Single-request legacy mode
+  method: z.string().optional().default('GET'),
+  url: z.string().optional(),
+  headers: z.record(z.string()).optional(),
+  data: z.any().optional(),
+  expect: z.object({
+    status: z.number().optional(),
+    contentType: z.string().optional(),
+    body: z.any().optional(),
+    bodyRegex: z.string().optional()
+  }).optional(),
+  // Chaining mode
+  chain: z.array(chainStepSchema).optional()
 });
 
 const apiRequestTool = defineTool({
@@ -41,6 +58,118 @@ const apiRequestTool = defineTool({
     type: 'readOnly'
   },
   async handle(ctx: any, input: any) {
+    // --- API CHAINING SUPPORT ---
+    function renderTemplate(str: string, vars: Record<string, any>) {
+      return str.replace(/{{\s*([\w.]+)\s*}}/g, (_, path) => {
+        const [step, ...rest] = path.split('.');
+        let val = vars[step];
+        for (const p of rest)
+          val = val?.[p];
+        return val !== undefined ? String(val) : '';
+      });
+    }
+    function extractFields(obj: any, extract: Record<string, string>) {
+      const result: Record<string, any> = {};
+      for (const [k, path] of Object.entries(extract || {})) {
+        const parts = path.split('.');
+        let val = obj;
+        for (const p of parts)
+          val = val?.[p];
+        result[k] = val;
+      }
+      return result;
+    }
+    // If 'chain' is present, execute steps sequentially
+    if (Array.isArray(input.chain)) {
+      const { request } = await import('playwright');
+      const context = await request.newContext();
+      const stepVars: Record<string, any> = {};
+      const results: any[] = [];
+      for (const step of input.chain) {
+        // Render templates in url, headers, data
+        const url = renderTemplate(step.url, stepVars);
+        const headers: Record<string, string> = {};
+        for (const k in (step.headers || {}))
+          headers[k] = renderTemplate(step.headers[k], stepVars);
+        let data = step.data;
+        if (typeof data === 'string')
+          data = renderTemplate(data, stepVars);
+        // Execute request
+        const response = await context.fetch(url, {
+          method: step.method || 'GET',
+          headers,
+          data
+        });
+
+        const status = response.status();
+        const contentType = response.headers()['content-type'] || '';
+        let responseBody;
+        if (contentType.includes('application/json'))
+          responseBody = await response.json();
+        else
+          responseBody = await response.text();
+        // Validation
+        const expect = step.expect || {};
+        const validation = {
+          status: expect.status ? status === expect.status : true,
+          contentType: expect.contentType ? contentType.includes(expect.contentType) : true
+        };
+        let bodyValidation = { matched: true, reason: 'No body expectation set.' };
+        if (expect.body !== undefined) {
+          if (typeof responseBody === 'object' && responseBody !== null && typeof expect.body === 'object') {
+            bodyValidation.matched = Object.entries(expect.body).every(
+                ([k, v]) => JSON.stringify(responseBody[k]) === JSON.stringify(v)
+            );
+            bodyValidation.reason = bodyValidation.matched
+              ? 'Partial/exact body match succeeded.'
+              : 'Partial/exact body match failed.';
+          } else if (typeof expect.body === 'string') {
+            bodyValidation.matched = JSON.stringify(responseBody) === expect.body || responseBody === expect.body;
+            bodyValidation.reason = bodyValidation.matched
+              ? 'Exact string match succeeded.'
+              : 'Exact string match failed.';
+          } else {
+            bodyValidation.matched = false;
+            bodyValidation.reason = 'Body type mismatch.';
+          }
+        }
+        if (expect.bodyRegex) {
+          const pattern = new RegExp(expect.bodyRegex);
+          const target = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+          const regexMatch = pattern.test(target);
+          bodyValidation = {
+            matched: regexMatch,
+            reason: regexMatch ? 'Regex match succeeded.' : 'Regex match failed.'
+          };
+        }
+        // Extract variables
+        const extracted = step.extract ? extractFields(responseBody, step.extract) : {};
+        stepVars[step.name] = { ...extracted, body: responseBody, status, contentType };
+        // Record step result
+        results.push({
+          name: step.name,
+          status,
+          contentType,
+          body: responseBody,
+          validation,
+          bodyValidation,
+          extracted
+        });
+      }
+      await context.dispose();
+      return {
+        code: [],
+        resultOverride: {
+          content: [{
+            type: 'text',
+            text: JSON.stringify(results, null, 2)
+          }]
+        },
+        captureSnapshot: false,
+        waitForNetwork: false
+      };
+    }
+    // --- SINGLE REQUEST MODE (legacy) ---
     const { method, url, headers, data, expect } = input;
     const { request } = await import('playwright');
     const context = await request.newContext();
@@ -61,7 +190,7 @@ const apiRequestTool = defineTool({
     // Basic validation
     const validation = {
       status: expect?.status ? status === expect.status : true,
-      contentType: expect?.contentType ? contentType.includes(expect.contentType) : true
+      contentType: expect?.contentType ? contentType.includes(expect?.contentType) : true
     };
 
     // --- Enhanced Response Body Validation ---

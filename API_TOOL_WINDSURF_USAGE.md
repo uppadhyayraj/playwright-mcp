@@ -233,3 +233,105 @@ Call the `api_request` tool to make a GET request to `https://reqres.in/api/user
 ---
 
 These examples can be copied directly into Windsurf prompts or used as templates for your own API testing scenarios.
+
+---
+
+## 7. API Chaining: Multi-Step Requests & Variable Passing
+
+You can execute a sequence of API requests where outputs from one step can be used in subsequent steps. This enables scenarios like login and token usage, resource creation and retrieval, etc.
+
+### Input Schema for Chaining
+
+**Windsurf Prompt Example:**
+```
+Call the `api_request` tool to execute a chain of two API requests. First, POST to `https://api.example.com/login` with username and password, extract the token, then GET `https://api.example.com/data` using `Bearer {{step1.token}}` in the Authorization header.
+```
+```json
+{
+  "chain": [
+    {
+      "name": "step1",
+      "method": "POST",
+      "url": "https://api.example.com/login",
+      "headers": { "Content-Type": "application/json" },
+      "data": { "username": "user", "password": "pass" },
+      "extract": { "token": "token" }
+    },
+    {
+      "name": "step2",
+      "method": "GET",
+      "url": "https://api.example.com/data",
+      "headers": { "Authorization": "Bearer {{step1.token}}" }
+    }
+  ]
+}
+```
+- Each step must have a unique `name`.
+- Use `extract` to pull fields from the response JSON (dot notation supported).
+- Use `{{stepName.field}}` in later steps to reference extracted values.
+
+---
+
+### Real-World Example: Login and Authenticated Request (reqres.in)
+
+**Windsurf Prompt Example:**
+```
+Call the `api_request` tool to chain a login to `https://reqres.in/api/login` (extract the token) and then GET `https://reqres.in/api/users/2` with Bearer token from the login step.
+```
+**Payload:**
+```json
+{
+  "chain": [
+    {
+      "name": "login",
+      "method": "POST",
+      "url": "https://reqres.in/api/login",
+      "headers": { "Content-Type": "application/json" },
+      "data": { "email": "eve.holt@reqres.in", "password": "cityslicka" },
+      "extract": { "token": "token" }
+    },
+    {
+      "name": "getUser",
+      "method": "GET",
+      "url": "https://reqres.in/api/users/2",
+      "headers": { "Authorization": "Bearer {{login.token}}" }
+    }
+  ]
+}
+```
+- The first step logs in and extracts the `token`.
+- The second step uses `{{login.token}}` in the Authorization header.
+- The tool output will include results for both steps, including extracted variables and validation.
+
+---
+
+### Chaining with Validation
+
+**Windsurf Prompt Example:**
+```
+Call the `api_request` tool to chain a login to `https://reqres.in/api/login` (extract the token, expect status 200) and then GET `https://reqres.in/api/users/2` with Bearer token from the login step, expecting status 200 and user id 2 in the body.
+```
+```json
+{
+  "chain": [
+    {
+      "name": "login",
+      "method": "POST",
+      "url": "https://reqres.in/api/login",
+      "headers": { "Content-Type": "application/json" },
+      "data": { "email": "eve.holt@reqres.in", "password": "cityslicka" },
+      "extract": { "token": "token" },
+      "expect": { "status": 200 }
+    },
+    {
+      "name": "getUser",
+      "method": "GET",
+      "url": "https://reqres.in/api/users/2",
+      "headers": { "Authorization": "Bearer {{login.token}}" },
+      "expect": { "status": 200, "body": { "data": { "id": 2 } } }
+    }
+  ]
+}
+```
+
+---
