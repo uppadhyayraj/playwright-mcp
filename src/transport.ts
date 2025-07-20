@@ -124,6 +124,59 @@ export function startHttpTransport(httpServer: http.Server, mcpServer: Server) {
   const streamableSessions = new Map();
   httpServer.on('request', async (req, res) => {
     const url = new URL(`http://localhost${req.url}`);
+    if (url.pathname === '/api/request' && req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => {
+        body += chunk;
+      });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body);
+          const { method, url: apiUrl, headers, data, expect } = payload;
+          const { request } = await import('playwright');
+          const context = await request.newContext();
+          const response = await context.fetch(apiUrl, {
+            method: method || 'GET',
+            headers,
+            data
+          });
+          const status = response.status();
+          const contentType = response.headers()['content-type'] || '';
+          let responseBody;
+          if (contentType.includes('application/json'))
+            responseBody = await response.json();
+          else
+            responseBody = await response.text();
+
+          // Basic validation
+          const validation = {
+            status: expect?.status ? status === expect.status : true,
+            contentType: expect?.contentType ? contentType.includes(expect.contentType) : true
+          };
+          await context.dispose();
+          res.setHeader('Content-Type', 'application/json');
+          res.end(JSON.stringify({
+            ok: validation.status && validation.contentType,
+            status,
+            contentType,
+            body: responseBody,
+            validation
+          }));
+        } catch (e) {
+          res.statusCode = 400;
+          res.setHeader('Content-Type', 'application/json');
+          let errorMsg = 'Unknown error';
+          if (e && typeof e === 'object' && 'message' in e)
+            errorMsg = (e as Error).message;
+          else if (typeof e === 'string')
+            errorMsg = e;
+          else
+            errorMsg = JSON.stringify(e);
+          res.end(JSON.stringify({ error: errorMsg }));
+        }
+      });
+      return;
+    }
     if (url.pathname.startsWith('/sse'))
       await handleSSE(mcpServer, req, res, url, sseSessions);
     else
@@ -142,7 +195,7 @@ export function startHttpTransport(httpServer: http.Server, mcpServer: Server) {
     }, undefined, 2),
     'For legacy SSE transport support, you can use the /sse endpoint instead.',
   ].join('\n');
-    // eslint-disable-next-line no-console
+  // eslint-disable-next-line no-console
   console.error(message);
 }
 
