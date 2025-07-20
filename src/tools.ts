@@ -31,6 +31,7 @@ import wait from './tools/wait.js';
 import mouse from './tools/mouse.js';
 import apiRequest from './tools/apiRequest.js';
 import { apiSessionStatusTools } from './tools/apiSessionStatus.js';
+import { apiSessionReportTools } from './tools/apiSessionReport.js';
 
 import type { Tool } from './tools/tool.js';
 
@@ -51,5 +52,6 @@ export const allTools: Tool<any>[] = [
   ...tabs,
   ...wait,
   ...apiRequest,
-  ...apiSessionStatusTools
+  ...apiSessionStatusTools,
+  ...apiSessionReportTools
 ];

@@ -340,7 +340,43 @@ The output will include all requests, responses, validation results, and timesta
 
 ---
 
-## 9. API Chaining: Multi-Step Requests & Variable Passing
+## 9. Generating an HTML Report for a Session
+
+You can generate and retrieve a detailed HTML report for any API test session using the `api_session_report` tool and a sessionId.
+
+### Example 1: Generate a Report for a Known Session
+
+**Windsurf Prompt Example:**
+```
+Call the `api_session_report` tool to generate an HTML report for session ID `login-chain-demo`.
+```
+**Payload:**
+```json
+{
+  "sessionId": "login-chain-demo"
+}
+```
+
+### Example 2: Generate a Report for an Auto-Generated Session
+
+If you did not provide a sessionId, copy the sessionId from the previous API tool result and use it here.
+
+**Windsurf Prompt Example:**
+```
+Call the `api_session_report` tool to generate an HTML report for session ID `session-abc123xyz`.
+```
+**Payload:**
+```json
+{
+  "sessionId": "session-abc123xyz"
+}
+```
+
+The output will show the file path to the generated HTML report (e.g., `reports/session-login-chain-demo.html`). Open this file in your browser to view the full report.
+
+---
+
+## 10. API Chaining: Multi-Step Requests & Variable Passing
 
 You can execute a sequence of API requests where outputs from one step can be used in subsequent steps. This enables scenarios like login and token usage, resource creation and retrieval, etc.
 
