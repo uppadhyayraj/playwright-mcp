@@ -670,5 +670,37 @@ http.createServer(async (req, res) => {
 
 </details>
 
+<details>
+<summary><b>API Testing Capabilities/Tools (opt-in via --caps=api_request,api_session_status,api_session_report)</b></summary>
 
-<!--- End of tools generated section -->
+- **api_request**
+
+  - Title: API Request/Chaining
+  - Description: Perform HTTP API requests (GET, POST, PUT, DELETE, etc.), with support for chaining multiple requests, extracting variables, response validation, and session logging. Enables robust API test workflows.
+  - Parameters:
+    - `method` (string, optional): HTTP method (GET, POST, PUT, DELETE, etc.)
+    - `url` (string): Target API endpoint
+    - `headers` (object, optional): Custom headers
+    - `data` (object, optional): Request body (for POST/PUT/PATCH)
+    - `expect` (object, optional): Response validation (status, contentType, body, bodyRegex)
+    - `chain` (array, optional): Sequence of API requests with variable passing
+    - `sessionId` (string, optional): Group requests into a session for reporting
+  - Read-only: **false**
+
+- **api_session_status**
+
+  - Title: API Session Status
+  - Description: Query the status, logs, and results for an API test session by sessionId. Useful for debugging and reporting.
+  - Parameters:
+    - `sessionId` (string): The session ID to query
+  - Read-only: **true**
+
+- **api_session_report**
+  - Title: API Session HTML Report
+  - Description: Generate and retrieve an HTML report summarizing all requests, responses, and validations for an API test session by sessionId.
+  - Parameters:
+    - `sessionId` (string): The session ID to generate a report for
+  - Read-only: **true**
+  - `How to use API Testing with Agents (Copilot/Cursor/Windsurf etc)?`: Refer to the Guide here [API Tool Usage](/API_TOOL_USAGE.md)
+  </details>
+  <!--- End of tools generated section -->

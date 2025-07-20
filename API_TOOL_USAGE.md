@@ -1,8 +1,8 @@
 ---
 
-## Playwright MCP API Tool Usage in Windsurf
+## Playwright MCP API Tool Usage in 
 
-This guide shows how to use the API testing tool you added to the Playwright MCP server from Windsurf, with real-world API endpoints and prompt examples for all HTTP methods and advanced validation.
+This guide shows how to use the API testing tool you added to the Playwright MCP server from , with real-world API endpoints and prompt examples for all HTTP methods and advanced validation.
 
 ---
 
@@ -112,7 +112,7 @@ You can add `expect` for status, content-type, and advanced body validation:
 
 ---
 
-## 5. Response Body Validation: Tested Windsurf Scenarios
+## 5. Response Body Validation: Example Scenarios
 
 ### A. Partial/Exact JSON Body Match
 **Prompt:**
@@ -173,7 +173,7 @@ Call the `api_request` tool to make a GET request to `https://jsonplaceholder.ty
 
 **Prompt:**
 ```
-Call the `api_request` tool to make a GET request to `https://httpbin.org/headers` with custom header `X-Custom-Header: WindsurfTest`.
+Call the `api_request` tool to make a GET request to `https://httpbin.org/headers` with custom header `X-Custom-Header: Test`.
 ```
 **Payload:**
 ```json
@@ -181,7 +181,7 @@ Call the `api_request` tool to make a GET request to `https://httpbin.org/header
   "method": "GET",
   "url": "https://httpbin.org/headers",
   "headers": {
-    "X-Custom-Header": "WindsurfTest"
+    "X-Custom-Header": "Test"
   }
 }
 ```
@@ -232,7 +232,7 @@ Call the `api_request` tool to make a GET request to `https://reqres.in/api/user
 
 ---
 
-These examples can be copied directly into Windsurf prompts or used as templates for your own API testing scenarios.
+These examples can be copied directly into  prompts or used as templates for your own API testing scenarios.
 
 ---
 
@@ -242,7 +242,7 @@ You can explicitly set a session ID for your API test workflow, or let the tool 
 
 ### Example 1: Provide a Custom sessionId
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_request` tool to make a POST request to `https://jsonplaceholder.typicode.com/posts` with session ID `demo-session-1`.
 ```
@@ -259,7 +259,7 @@ Call the `api_request` tool to make a POST request to `https://jsonplaceholder.t
 
 ### Example 2: Use sessionId in Chaining
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_request` tool to chain a login and authenticated GET using session ID `login-chain-demo`.
 ```
@@ -288,7 +288,7 @@ Call the `api_request` tool to chain a login and authenticated GET using session
 
 ### Example 3: Omit sessionId for Auto-Generated Sessions
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_request` tool to make a GET request to `https://jsonplaceholder.typicode.com/posts/1` and let the tool auto-generate the session ID.
 ```
@@ -310,7 +310,7 @@ You can retrieve the status, logs, and results for any API test session using th
 
 ### Example 1: Query a Known Session
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_session_status` tool to show the logs and results for session ID `login-chain-demo`.
 ```
@@ -325,7 +325,7 @@ Call the `api_session_status` tool to show the logs and results for session ID `
 
 If you did not provide a sessionId, copy the sessionId from the previous API tool result and use it here.
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_session_status` tool to show the results for session ID `session-abc123xyz`.
 ```
@@ -346,7 +346,7 @@ You can generate and retrieve a detailed HTML report for any API test session us
 
 ### Example 1: Generate a Report for a Known Session
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_session_report` tool to generate an HTML report for session ID `login-chain-demo`.
 ```
@@ -361,7 +361,7 @@ Call the `api_session_report` tool to generate an HTML report for session ID `lo
 
 If you did not provide a sessionId, copy the sessionId from the previous API tool result and use it here.
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_session_report` tool to generate an HTML report for session ID `session-abc123xyz`.
 ```
@@ -382,7 +382,7 @@ You can execute a sequence of API requests where outputs from one step can be us
 
 ### Input Schema for Chaining
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_request` tool to execute a chain of two API requests. First, POST to `https://api.example.com/login` with username and password, extract the token, then GET `https://api.example.com/data` using `Bearer {{step1.token}}` in the Authorization header.
 ```
@@ -414,7 +414,7 @@ Call the `api_request` tool to execute a chain of two API requests. First, POST 
 
 ### Real-World Example: Login and Authenticated Request (reqres.in)
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_request` tool to chain a login to `https://reqres.in/api/login` (extract the token) and then GET `https://reqres.in/api/users/2` with Bearer token from the login step.
 ```
@@ -447,7 +447,7 @@ Call the `api_request` tool to chain a login to `https://reqres.in/api/login` (e
 
 ### Chaining with Validation
 
-**Windsurf Prompt Example:**
+** Prompt Example:**
 ```
 Call the `api_request` tool to chain a login to `https://reqres.in/api/login` (extract the token, expect status 200) and then GET `https://reqres.in/api/users/2` with Bearer token from the login step, expecting status 200 and user id 2 in the body.
 ```
