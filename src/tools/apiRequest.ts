@@ -25,7 +25,10 @@ const apiRequestInputSchema = z.object({
   expect: z.object({
     status: z.number().optional(),
     contentType: z.string().optional()
-  }).optional()
+  }).optional(),
+  // For response body validation
+  body: z.any().optional(), // partial/exact match for JSON or string
+  bodyRegex: z.string().optional() // regex for text or stringified JSON
 });
 
 const apiRequestTool = defineTool({
@@ -60,6 +63,39 @@ const apiRequestTool = defineTool({
       status: expect?.status ? status === expect.status : true,
       contentType: expect?.contentType ? contentType.includes(expect.contentType) : true
     };
+
+    // --- Enhanced Response Body Validation ---
+    let bodyValidation = { matched: true, reason: 'No body expectation set.' };
+    if (expect?.body !== undefined) {
+      if (typeof responseBody === 'object' && responseBody !== null && typeof expect.body === 'object') {
+        // Partial match: all keys/values in expect.body must be present in responseBody
+        bodyValidation.matched = Object.entries(expect.body).every(
+            ([k, v]) => JSON.stringify(responseBody[k]) === JSON.stringify(v)
+        );
+        bodyValidation.reason = bodyValidation.matched
+          ? 'Partial/exact body match succeeded.'
+          : 'Partial/exact body match failed.';
+      } else if (typeof expect.body === 'string') {
+        bodyValidation.matched = JSON.stringify(responseBody) === expect.body || responseBody === expect.body;
+        bodyValidation.reason = bodyValidation.matched
+          ? 'Exact string match succeeded.'
+          : 'Exact string match failed.';
+      } else {
+        bodyValidation.matched = false;
+        bodyValidation.reason = 'Body type mismatch.';
+      }
+    }
+    if (expect?.bodyRegex) {
+      const pattern = new RegExp(expect.bodyRegex);
+      const target = typeof responseBody === 'string' ? responseBody : JSON.stringify(responseBody);
+      const regexMatch = pattern.test(target);
+      bodyValidation = {
+        matched: regexMatch,
+        reason: regexMatch ? 'Regex match succeeded.' : 'Regex match failed.'
+      };
+    }
+    // --- End Enhanced Validation ---
+
     await context.dispose();
     return {
       code: [],
@@ -67,11 +103,12 @@ const apiRequestTool = defineTool({
         content: [{
           type: 'text',
           text: JSON.stringify({
-            ok: validation.status && validation.contentType,
+            ok: validation.status && validation.contentType && bodyValidation.matched,
             status,
             contentType,
             body: responseBody,
-            validation
+            validation,
+            bodyValidation
           }, null, 2)
         }]
       },
