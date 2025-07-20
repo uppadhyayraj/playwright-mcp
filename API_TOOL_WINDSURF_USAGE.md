@@ -236,7 +236,75 @@ These examples can be copied directly into Windsurf prompts or used as templates
 
 ---
 
-## 7. API Chaining: Multi-Step Requests & Variable Passing
+## 7. Using sessionId for API Test Sessions
+
+You can explicitly set a session ID for your API test workflow, or let the tool auto-generate one. This helps you group related API calls for reporting and debugging.
+
+### Example 1: Provide a Custom sessionId
+
+**Windsurf Prompt Example:**
+```
+Call the `api_request` tool to make a POST request to `https://jsonplaceholder.typicode.com/posts` with session ID `demo-session-1`.
+```
+**Payload:**
+```json
+{
+  "sessionId": "demo-session-1",
+  "method": "POST",
+  "url": "https://jsonplaceholder.typicode.com/posts",
+  "headers": { "Content-Type": "application/json" },
+  "data": { "title": "foo", "body": "bar", "userId": 1 }
+}
+```
+
+### Example 2: Use sessionId in Chaining
+
+**Windsurf Prompt Example:**
+```
+Call the `api_request` tool to chain a login and authenticated GET using session ID `login-chain-demo`.
+```
+**Payload:**
+```json
+{
+  "sessionId": "login-chain-demo",
+  "chain": [
+    {
+      "name": "login",
+      "method": "POST",
+      "url": "https://reqres.in/api/login",
+      "headers": { "Content-Type": "application/json" },
+      "data": { "email": "eve.holt@reqres.in", "password": "cityslicka" },
+      "extract": { "token": "token" }
+    },
+    {
+      "name": "getUser",
+      "method": "GET",
+      "url": "https://reqres.in/api/users/2",
+      "headers": { "Authorization": "Bearer {{login.token}}" }
+    }
+  ]
+}
+```
+
+### Example 3: Omit sessionId for Auto-Generated Sessions
+
+**Windsurf Prompt Example:**
+```
+Call the `api_request` tool to make a GET request to `https://jsonplaceholder.typicode.com/posts/1` and let the tool auto-generate the session ID.
+```
+**Payload:**
+```json
+{
+  "method": "GET",
+  "url": "https://jsonplaceholder.typicode.com/posts/1"
+}
+```
+
+The tool result will always include the sessionId used, so you can reference it for later queries or reporting.
+
+---
+
+## 8. API Chaining: Multi-Step Requests & Variable Passing
 
 You can execute a sequence of API requests where outputs from one step can be used in subsequent steps. This enables scenarios like login and token usage, resource creation and retrieval, etc.
 

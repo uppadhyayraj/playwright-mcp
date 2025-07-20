@@ -33,6 +33,7 @@ const chainStepSchema = z.object({
 });
 
 const apiRequestInputSchema = z.object({
+  sessionId: z.string().optional(), // New: session management
   // Single-request legacy mode
   method: z.string().optional().default('GET'),
   url: z.string().optional(),
@@ -48,6 +49,10 @@ const apiRequestInputSchema = z.object({
   chain: z.array(chainStepSchema).optional()
 });
 
+// --- In-memory session store ---
+const sessionStore: Map<string, any> = (globalThis as any).__API_SESSION_STORE__ || new Map();
+(globalThis as any).__API_SESSION_STORE__ = sessionStore;
+
 const apiRequestTool = defineTool({
   capability: 'api_request',
   schema: {
@@ -58,6 +63,23 @@ const apiRequestTool = defineTool({
     type: 'readOnly'
   },
   async handle(ctx: any, input: any) {
+    // --- Session Management ---
+    const uuid = () => {
+      if (typeof crypto.randomUUID === 'function')
+        return crypto.randomUUID();
+      // Simple pseudo-unique fallback: not cryptographically secure, but fine for session IDs
+      return 'session-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    };
+    const sessionId = input.sessionId || uuid();
+    if (!sessionStore.has(sessionId)) {
+      sessionStore.set(sessionId, {
+        sessionId,
+        startTime: new Date().toISOString(),
+        logs: [],
+        status: 'running'
+      });
+    }
+    const session = sessionStore.get(sessionId);
     // --- API CHAINING SUPPORT ---
     function renderTemplate(str: string, vars: Record<string, any>) {
       return str.replace(/{{\s*([\w.]+)\s*}}/g, (_, path) => {
@@ -155,14 +177,39 @@ const apiRequestTool = defineTool({
           bodyValidation,
           extracted
         });
+        // Log to session
+        session.logs.push({
+          type: 'request',
+          request: {
+            method: step.method || 'GET',
+            url,
+            headers,
+            data
+          },
+          response: {
+            status,
+            contentType,
+            body: responseBody
+          },
+          validation,
+          bodyValidation,
+          timestamp: new Date().toISOString()
+        });
       }
       await context.dispose();
+      // Log to session
+      session.logs.push({
+        type: 'chain',
+        steps: results,
+        timestamp: new Date().toISOString()
+      });
+      session.status = 'completed';
       return {
         code: [],
         resultOverride: {
           content: [{
             type: 'text',
-            text: JSON.stringify(results, null, 2)
+            text: JSON.stringify({ sessionId, results }, null, 2)
           }]
         },
         captureSnapshot: false,
