@@ -671,36 +671,52 @@ http.createServer(async (req, res) => {
 </details>
 
 <details>
-<summary><b>API Testing Capabilities/Tools (opt-in via --caps=api_request,api_session_status,api_session_report)</b></summary>
+<summary><b>API request tools (opt-in via --caps=api_request)</b></summary>
+
+<!-- NOTE: This has been generated via update-readme.js -->
 
 - **api_request**
-
-  - Title: API Request/Chaining
-  - Description: Perform HTTP API requests (GET, POST, PUT, DELETE, etc.), with support for chaining multiple requests, extracting variables, response validation, and session logging. Enables robust API test workflows.
+  - Title: API Request
+  - Description: Perform an HTTP API request and validate the response.
   - Parameters:
-    - `method` (string, optional): HTTP method (GET, POST, PUT, DELETE, etc.)
-    - `url` (string): Target API endpoint
-    - `headers` (object, optional): Custom headers
-    - `data` (object, optional): Request body (for POST/PUT/PATCH)
-    - `expect` (object, optional): Response validation (status, contentType, body, bodyRegex)
-    - `chain` (array, optional): Sequence of API requests with variable passing
-    - `sessionId` (string, optional): Group requests into a session for reporting
-  - Read-only: **false**
+    - `sessionId` (string, optional): undefined
+    - `method` (string, optional): undefined
+    - `url` (string, optional): undefined
+    - `headers` (object, optional): undefined
+    - `data` (optional): undefined
+    - `expect` (object, optional): undefined
+    - `chain` (array, optional): undefined
+  - Read-only: **true**
+
+</details>
+
+<details>
+<summary><b>API session status (opt-in via --caps=api_session_status)</b></summary>
+
+<!-- NOTE: This has been generated via update-readme.js -->
 
 - **api_session_status**
-
   - Title: API Session Status
-  - Description: Query the status, logs, and results for an API test session by sessionId. Useful for debugging and reporting.
+  - Description: Query API test session status, logs, and results by sessionId.
   - Parameters:
-    - `sessionId` (string): The session ID to query
+    - `sessionId` (string): undefined
   - Read-only: **true**
+
+</details>
+
+<details>
+<summary><b>API session reporting (opt-in via --caps=api_session_report)</b></summary>
+
+<!-- NOTE: This has been generated via update-readme.js -->
 
 - **api_session_report**
   - Title: API Session HTML Report
-  - Description: Generate and retrieve an HTML report summarizing all requests, responses, and validations for an API test session by sessionId.
+  - Description: Generate and retrieve an HTML report for an API test session by sessionId.
   - Parameters:
-    - `sessionId` (string): The session ID to generate a report for
+    - `sessionId` (string): undefined
   - Read-only: **true**
-  - `How to use API Testing with Agents (Copilot/Cursor/Windsurf etc)?`: Refer to the Guide here [API Tool Usage](/API_TOOL_USAGE.md)
-  </details>
-  <!--- End of tools generated section -->
+
+</details>
+
+
+<!--- End of tools generated section -->
