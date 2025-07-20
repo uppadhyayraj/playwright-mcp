@@ -304,7 +304,43 @@ The tool result will always include the sessionId used, so you can reference it 
 
 ---
 
-## 8. API Chaining: Multi-Step Requests & Variable Passing
+## 8. Querying API Session Status
+
+You can retrieve the status, logs, and results for any API test session using the `api_session_status` tool and a sessionId.
+
+### Example 1: Query a Known Session
+
+**Windsurf Prompt Example:**
+```
+Call the `api_session_status` tool to show the logs and results for session ID `login-chain-demo`.
+```
+**Payload:**
+```json
+{
+  "sessionId": "login-chain-demo"
+}
+```
+
+### Example 2: Query an Auto-Generated Session
+
+If you did not provide a sessionId, copy the sessionId from the previous API tool result and use it here.
+
+**Windsurf Prompt Example:**
+```
+Call the `api_session_status` tool to show the results for session ID `session-abc123xyz`.
+```
+**Payload:**
+```json
+{
+  "sessionId": "session-abc123xyz"
+}
+```
+
+The output will include all requests, responses, validation results, and timestamps for the session.
+
+---
+
+## 9. API Chaining: Multi-Step Requests & Variable Passing
 
 You can execute a sequence of API requests where outputs from one step can be used in subsequent steps. This enables scenarios like login and token usage, resource creation and retrieval, etc.
 

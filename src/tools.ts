@@ -30,6 +30,7 @@ import screenshot from './tools/screenshot.js';
 import wait from './tools/wait.js';
 import mouse from './tools/mouse.js';
 import apiRequest from './tools/apiRequest.js';
+import { apiSessionStatusTools } from './tools/apiSessionStatus.js';
 
 import type { Tool } from './tools/tool.js';
 
@@ -49,5 +50,6 @@ export const allTools: Tool<any>[] = [
   ...snapshot,
   ...tabs,
   ...wait,
-  ...apiRequest
+  ...apiRequest,
+  ...apiSessionStatusTools
 ];
