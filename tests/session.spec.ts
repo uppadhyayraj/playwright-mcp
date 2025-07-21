@@ -57,7 +57,7 @@ test('check that session includes multiple tool calls', async ({ startClient, se
     arguments: { url: server.HELLO_WORLD },
   });
 
-  // Take a snapshot 
+  // Take a snapshot
   await client.callTool({
     name: 'browser_snapshot',
     arguments: {},
@@ -71,7 +71,7 @@ test('check that session includes multiple tool calls', async ({ startClient, se
   const sessionContent = fs.readFileSync(path.join(outputDir, sessionFiles[0]), 'utf8');
   expect(sessionContent).toContain('- browser_navigate:');
   expect(sessionContent).toContain('- browser_snapshot:');
-  
+
   // Check that snapshot files exist
   const snapshotFiles = files.filter(f => f.includes('snapshot.yaml'));
   expect(snapshotFiles.length).toBeGreaterThan(0);

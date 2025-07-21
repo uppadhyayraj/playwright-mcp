@@ -52,9 +52,8 @@ export class Context {
     this.config = config;
     this._browserContextFactory = browserContextFactory;
     testDebug('create context');
-    if (this.config.saveSession) {
+    if (this.config.saveSession)
       void this._initializeSessionFile();
-    }
   }
 
   clientSupportsImages(): boolean {
@@ -138,11 +137,11 @@ export class Context {
   private async _initializeSessionFile() {
     if (!this.config.saveSession)
       return;
-    
+
     const timestamp = new Date().toISOString();
     const fileName = `session${timestamp}.yml`;
     this._sessionFile = await outputFile(this.config, fileName);
-    
+
     // Initialize empty session file
     await fs.promises.writeFile(this._sessionFile, '# Session log started at ' + timestamp + '\n', 'utf8');
   }
@@ -163,9 +162,8 @@ export class Context {
     }
 
     // Add snapshot reference if provided
-    if (snapshotFile) {
+    if (snapshotFile)
       entry.push(`    snapshot: ${path.basename(snapshotFile)}`);
-    }
 
     entry.push(''); // Empty line for readability
 
@@ -191,7 +189,7 @@ export class Context {
 
     const tab = this.currentTabOrDie();
     let snapshotFile: string | undefined;
-    
+
     // TODO: race against modal dialogs to resolve clicks.
     const actionResult = await this._raceAgainstModalDialogs(async () => {
       try {
@@ -214,9 +212,8 @@ export class Context {
     });
 
     // Log session entry if enabled
-    if (this.config.saveSession) {
+    if (this.config.saveSession)
       await this._logSessionEntry(tool.schema.name, params || {}, snapshotFile);
-    }
 
     const result: string[] = [];
     result.push(`### Ran Playwright code
