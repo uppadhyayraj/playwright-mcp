@@ -148,12 +148,16 @@ export class Context {
   }
 
   private async _logSessionEntry(toolName: string, params: Record<string, unknown>, snapshotFile?: string) {
-    if (!this.config.saveSession || !this._sessionFile)
+    if (!this.config.saveSession)
       return;
 
     // Ensure session file is initialized before proceeding
     if (this._sessionFileInitialized)
       await this._sessionFileInitialized;
+
+    // After initialization, session file should always be defined when saveSession is true
+    if (!this._sessionFile)
+      throw new Error('Session file not initialized despite saveSession being enabled');
 
     const entry = [
       `- ${toolName}:`,
