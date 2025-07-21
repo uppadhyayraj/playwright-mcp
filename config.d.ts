@@ -91,6 +91,11 @@ export type Config = {
   saveTrace?: boolean;
 
   /**
+   * Whether to save the session log with tool calls and snapshots into the output directory.
+   */
+  saveSession?: boolean;
+
+  /**
    * The directory to save output files.
    */
   outputDir?: string;

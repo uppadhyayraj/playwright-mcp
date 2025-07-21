@@ -16,6 +16,8 @@
 
 import debug from 'debug';
 import * as playwright from 'playwright';
+import * as fs from 'fs';
+import * as path from 'path';
 
 import { callOnPageNoTrace, waitForCompletion } from './tools/utils.js';
 import { ManualPromise } from './manualPromise.js';
@@ -42,6 +44,7 @@ export class Context {
   private _modalStates: (ModalState & { tab: Tab })[] = [];
   private _pendingAction: PendingAction | undefined;
   private _downloads: { download: playwright.Download, finished: boolean, outputFile: string }[] = [];
+  private _sessionFile: string | undefined;
   clientVersion: { name: string; version: string; } | undefined;
 
   constructor(tools: Tool[], config: FullConfig, browserContextFactory: BrowserContextFactory) {
@@ -49,6 +52,9 @@ export class Context {
     this.config = config;
     this._browserContextFactory = browserContextFactory;
     testDebug('create context');
+    if (this.config.saveSession) {
+      void this._initializeSessionFile();
+    }
   }
 
   clientSupportsImages(): boolean {
@@ -129,6 +135,43 @@ export class Context {
     return await this.listTabsMarkdown();
   }
 
+  private async _initializeSessionFile() {
+    if (!this.config.saveSession)
+      return;
+    
+    const timestamp = new Date().toISOString();
+    const fileName = `session${timestamp}.yml`;
+    this._sessionFile = await outputFile(this.config, fileName);
+    
+    // Initialize empty session file
+    await fs.promises.writeFile(this._sessionFile, '# Session log started at ' + timestamp + '\n', 'utf8');
+  }
+
+  private async _logSessionEntry(toolName: string, params: Record<string, unknown>, snapshotFile?: string) {
+    if (!this.config.saveSession || !this._sessionFile)
+      return;
+
+    const entry = [
+      `- ${toolName}:`,
+      '    params:',
+    ];
+
+    // Add parameters with proper YAML indentation
+    for (const [key, value] of Object.entries(params)) {
+      const yamlValue = typeof value === 'string' ? value : JSON.stringify(value);
+      entry.push(`      ${key}: ${yamlValue}`);
+    }
+
+    // Add snapshot reference if provided
+    if (snapshotFile) {
+      entry.push(`    snapshot: ${path.basename(snapshotFile)}`);
+    }
+
+    entry.push(''); // Empty line for readability
+
+    await fs.promises.appendFile(this._sessionFile, entry.join('\n') + '\n', 'utf8');
+  }
+
   async run(tool: Tool, params: Record<string, unknown> | undefined) {
     // Tab management is done outside of the action() call.
     const toolResult = await tool.handle(this, tool.schema.inputSchema.parse(params || {}));
@@ -147,6 +190,8 @@ export class Context {
     }
 
     const tab = this.currentTabOrDie();
+    let snapshotFile: string | undefined;
+    
     // TODO: race against modal dialogs to resolve clicks.
     const actionResult = await this._raceAgainstModalDialogs(async () => {
       try {
@@ -155,10 +200,23 @@ export class Context {
         else
           return await action?.() ?? undefined;
       } finally {
-        if (captureSnapshot && !this._javaScriptBlocked())
+        if (captureSnapshot && !this._javaScriptBlocked()) {
           await tab.captureSnapshot();
+          // Save snapshot to file if session logging is enabled
+          if (this.config.saveSession && tab.hasSnapshot()) {
+            const timestamp = new Date().toISOString();
+            const snapshotFileName = `${timestamp}.snapshot.yaml`;
+            snapshotFile = await outputFile(this.config, snapshotFileName);
+            await fs.promises.writeFile(snapshotFile, tab.snapshotOrDie().text(), 'utf8');
+          }
+        }
       }
     });
+
+    // Log session entry if enabled
+    if (this.config.saveSession) {
+      await this._logSessionEntry(tool.schema.name, params || {}, snapshotFile);
+    }
 
     const result: string[] = [];
     result.push(`### Ran Playwright code
