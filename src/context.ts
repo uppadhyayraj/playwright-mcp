@@ -45,6 +45,7 @@ export class Context {
   private _pendingAction: PendingAction | undefined;
   private _downloads: { download: playwright.Download, finished: boolean, outputFile: string }[] = [];
   private _sessionFile: string | undefined;
+  private _sessionFileInitialized: Promise<void> | undefined;
   clientVersion: { name: string; version: string; } | undefined;
 
   constructor(tools: Tool[], config: FullConfig, browserContextFactory: BrowserContextFactory) {
@@ -53,7 +54,7 @@ export class Context {
     this._browserContextFactory = browserContextFactory;
     testDebug('create context');
     if (this.config.saveSession)
-      void this._initializeSessionFile();
+      this._sessionFileInitialized = this._initializeSessionFile();
   }
 
   clientSupportsImages(): boolean {
@@ -149,6 +150,10 @@ export class Context {
   private async _logSessionEntry(toolName: string, params: Record<string, unknown>, snapshotFile?: string) {
     if (!this.config.saveSession || !this._sessionFile)
       return;
+
+    // Ensure session file is initialized before proceeding
+    if (this._sessionFileInitialized)
+      await this._sessionFileInitialized;
 
     const entry = [
       `- ${toolName}:`,
