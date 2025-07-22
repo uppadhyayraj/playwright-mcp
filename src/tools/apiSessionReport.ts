@@ -13,10 +13,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { z } from 'zod';
-import { defineTool } from './tool.js';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { z } from 'zod';
+import { defineTool } from './tool.js';
 
 // Use the same global session store as apiRequest
 const sessionStore: Map<string, any> = (globalThis as any).__API_SESSION_STORE__ || new Map();
@@ -63,20 +63,21 @@ function renderHtmlReport(session: any): string {
       return `<tr><td>${i + 1}</td><td>${log.type}</td><td><pre>${JSON.stringify(log.request, null, 2)}</pre></td><td>${log.response?.status ?? log.result?.status}</td><td class='${ok ? 'pass' : 'fail'}'>${ok ? 'PASS' : 'FAIL'}<br>${log.bodyValidation?.reason ?? ''}</td><td>${log.timestamp}</td></tr>`;
     } else if (log.type === 'chain') {
       return log.steps
-        .filter((step: any) => step && (step.method || step.url || step.request)) // Skip empty steps
-        .map((step: any, j: number) => {
-          const ok = step.validation?.status && step.validation?.contentType && step.bodyValidation?.matched;
-          const requestInfo = step.request || { 
-            method: step.method, 
-            url: step.url, 
-            headers: step.headers, 
-            data: step.data 
-          };
-          // Only render if we have some request data to show
-          if (Object.keys(requestInfo).length === 0) return '';
-          return `<tr><td>${i + 1}.${j + 1}</td><td>chain-step</td><td><pre>${JSON.stringify(requestInfo, null, 2)}</pre></td><td>${step.status || ''}</td><td class='${ok ? 'pass' : 'fail'}'>${ok ? 'PASS' : 'FAIL'}<br>${step.bodyValidation?.reason ?? ''}</td><td>${step.timestamp || ''}</td></tr>`;
-        })
-        .join('');
+          .filter((step: any) => step && (step.method || step.url || step.request)) // Skip empty steps
+          .map((step: any, j: number) => {
+            const ok = step.validation?.status && step.validation?.contentType && step.bodyValidation?.matched;
+            const requestInfo = step.request || {
+              method: step.method,
+              url: step.url,
+              headers: step.headers,
+              data: step.data
+            };
+            // Only render if we have some request data to show
+            if (Object.keys(requestInfo).length === 0)
+              return '';
+            return `<tr><td>${i + 1}.${j + 1}</td><td>chain-step</td><td><pre>${JSON.stringify(requestInfo, null, 2)}</pre></td><td>${step.status || ''}</td><td class='${ok ? 'pass' : 'fail'}'>${ok ? 'PASS' : 'FAIL'}<br>${step.bodyValidation?.reason ?? ''}</td><td>${step.timestamp || ''}</td></tr>`;
+          })
+          .join('');
     }
     return '';
   }).join('')}

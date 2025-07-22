@@ -221,6 +221,11 @@ const apiRequestTool = defineTool({
     }
     // --- SINGLE REQUEST MODE (legacy) ---
     const { method, url, headers, data, expect } = input;
+
+    // Validate required parameters for single request mode
+    if (!url)
+      throw new Error('URL is required for single request mode');
+
     const { request } = await import('playwright');
     const context = await request.newContext();
     const response = await context.fetch(url, {
@@ -274,6 +279,27 @@ const apiRequestTool = defineTool({
       };
     }
     // --- End Enhanced Validation ---
+
+    // Log to session
+    if (session && session.logs) {
+      session.logs.push({
+        type: 'single',
+        request: {
+          method: method || 'GET',
+          url,
+          headers,
+          data
+        },
+        response: {
+          status,
+          contentType,
+          body: responseBody
+        },
+        validation,
+        bodyValidation,
+        timestamp: new Date().toISOString()
+      });
+    }
 
     await context.dispose();
     return {
