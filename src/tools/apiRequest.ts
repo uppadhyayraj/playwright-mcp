@@ -65,7 +65,7 @@ const apiRequestTool = defineTool({
   async handle(ctx: any, input: any) {
     // --- Session Management ---
     const uuid = () => {
-      if (typeof crypto.randomUUID === 'function')
+      if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
         return crypto.randomUUID();
       // Simple pseudo-unique fallback: not cryptographically secure, but fine for session IDs
       return 'session-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
@@ -166,6 +166,9 @@ const apiRequestTool = defineTool({
         }
         // Extract variables
         const extracted = step.extract ? extractFields(responseBody, step.extract) : {};
+        // Add extracted variables directly to stepVars for template rendering
+        Object.assign(stepVars, extracted);
+        // Also store step results for reference
         stepVars[step.name] = { ...extracted, body: responseBody, status, contentType };
         // Record step result
         results.push({
