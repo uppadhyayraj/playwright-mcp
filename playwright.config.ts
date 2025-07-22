@@ -26,6 +26,18 @@ export default defineConfig<TestOptions>({
   workers: process.env.CI ? 1 : undefined,
   reporter: 'list',
   projects: [
+    // API-focused tests - run only on Chrome for efficiency
+    {
+      name: 'api',
+      testMatch: [
+        '**/api*.spec.ts',
+        '**/*api*.spec.ts',
+        '**/apiRequest*.spec.ts',
+        '**/apiSessionStatus*.spec.ts'
+      ],
+      use: { mcpBrowser: 'chrome' }
+    },
+    // Full browser testing for UI and browser-specific functionality
     { name: 'chrome' },
     { name: 'msedge', use: { mcpBrowser: 'msedge' } },
     { name: 'chromium', use: { mcpBrowser: 'chromium' } },

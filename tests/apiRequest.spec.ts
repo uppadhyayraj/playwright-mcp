@@ -17,6 +17,11 @@
 import { test, expect } from './fixtures.js';
 
 test.describe('API Request Tool - Working Tests', () => {
+// Skip these API tests on all browsers except API config as these are API tests
+  test.beforeEach(async ({}, testInfo) => {
+    if (testInfo.project.name !== 'api')
+      test.skip(true, 'API tests should only run on API config');
+  });
   test('single API request with validation', async ({ startClient, server }) => {
     const { client } = await startClient({
       config: {

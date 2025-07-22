@@ -77,6 +77,11 @@ function validateWithRegex(responseBody: any, bodyRegex: string) {
 }
 
 test.describe('API Request Tool Unit Tests', () => {
+  // Skip these API tests on all browsers except API config as these are API tests
+  test.beforeEach(async ({}, testInfo) => {
+    if (testInfo.project.name !== 'api')
+      test.skip(true, 'API tests should only run on API config');
+  });
   test.describe('renderTemplate function', () => {
     test('renders simple template variables', () => {
       const vars = { step1: { value: 'test' } };
