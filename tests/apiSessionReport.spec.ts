@@ -89,8 +89,8 @@ test.describe('API Session Report Integration Tests', () => {
 
     // Verify HTML structure and content
     expect(htmlContent).toContain('<!DOCTYPE html>');
-    expect(htmlContent).toContain(`API Test Session Report: ${sessionId}`);
-    expect(htmlContent).toContain(`<b>Session ID:</b> ${sessionId}`);
+    expect(htmlContent).toContain(`API Test Session Report`);
+    expect(htmlContent).toContain(`Session: ${sessionId}`);
     expect(htmlContent).toContain('/api/login');
     expect(htmlContent).toContain('/api/users');
     expect(htmlContent).toContain('POST');
@@ -98,9 +98,9 @@ test.describe('API Session Report Integration Tests', () => {
     expect(htmlContent).toContain('Bearer auth-token-123');
 
     // Verify CSS is included
-    expect(htmlContent).toContain('font-family: Arial, sans-serif');
-    expect(htmlContent).toContain('.pass { color: green; }');
-    expect(htmlContent).toContain('.fail { color: red; }');
+    expect(htmlContent).toContain('font-family: -apple-system, BlinkMacSystemFont');
+    expect(htmlContent).toContain('.validation-passed');
+    expect(htmlContent).toContain('.validation-failed');
 
     // Cleanup
     await fs.unlink(reportPath).catch(() => {});
@@ -249,7 +249,7 @@ test.describe('API Session Report Integration Tests', () => {
     const reportPath = path.join(reportsDir, `session-${sessionId}.html`);
     const htmlContent = await fs.readFile(reportPath, 'utf8');
 
-    expect(htmlContent).toContain('class=\'fail\'>FAIL');
+    expect(htmlContent).toContain('✗ Validation');
     expect(htmlContent).toContain('/api/error');
     expect(htmlContent).toContain('/api/wrong-content');
     expect(htmlContent).toContain('500'); // Error status code

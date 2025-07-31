@@ -124,6 +124,7 @@ const apiRequestTool = defineTool({
         });
 
         const status = response.status();
+        const statusText = response.statusText();
         const contentType = response.headers()['content-type'] || '';
         let responseBody;
         if (contentType.includes('application/json'))
@@ -169,11 +170,12 @@ const apiRequestTool = defineTool({
         // Add extracted variables directly to stepVars for template rendering
         Object.assign(stepVars, extracted);
         // Also store step results for reference
-        stepVars[step.name] = { ...extracted, body: responseBody, status, contentType };
+        stepVars[step.name] = { ...extracted, body: responseBody, status, statusText, contentType };
         // Record step result
         results.push({
           name: step.name,
           status,
+          statusText,
           contentType,
           body: responseBody,
           validation,
@@ -191,9 +193,11 @@ const apiRequestTool = defineTool({
           },
           response: {
             status,
+            statusText,
             contentType,
             body: responseBody
           },
+          expectations: expect, // Store the expectations
           validation,
           bodyValidation,
           timestamp: new Date().toISOString()
@@ -235,6 +239,7 @@ const apiRequestTool = defineTool({
     });
 
     const status = response.status();
+    const statusText = response.statusText();
     const contentType = response.headers()['content-type'] || '';
     let responseBody;
     if (contentType.includes('application/json'))
@@ -292,9 +297,11 @@ const apiRequestTool = defineTool({
         },
         response: {
           status,
+          statusText,
           contentType,
           body: responseBody
         },
+        expectations: expect, // Store the expectations
         validation,
         bodyValidation,
         timestamp: new Date().toISOString()
@@ -310,6 +317,7 @@ const apiRequestTool = defineTool({
           text: JSON.stringify({
             ok: validation.status && validation.contentType && bodyValidation.matched,
             status,
+            statusText,
             contentType,
             body: responseBody,
             validation,
