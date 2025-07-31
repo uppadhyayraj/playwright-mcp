@@ -31,26 +31,24 @@ const apiSessionStatusTool = defineTool({
     }),
     type: 'readOnly'
   },
-  async handle(ctx: any, input: { sessionId: string }) {
+  async handle(ctx: any, input: { sessionId: string }, response: any) {
     const session = sessionStore.get(input.sessionId);
     if (!session) {
-      return {
-        code: [],
-        resultOverride: {
-          content: [{ type: 'text', text: `Session not found: ${input.sessionId}` }]
-        },
-        captureSnapshot: false,
-        waitForNetwork: false
+      response.resultOverride = {
+        content: [{ type: 'text', text: `Session not found: ${input.sessionId}` }]
       };
+      response.code = [];
+      response.captureSnapshot = false;
+      response.waitForNetwork = false;
+      return;
     }
-    return {
-      code: [],
-      resultOverride: {
-        content: [{ type: 'text', text: JSON.stringify(session, null, 2) }]
-      },
-      captureSnapshot: false,
-      waitForNetwork: false
+    response.resultOverride = {
+      content: [{ type: 'text', text: JSON.stringify(session, null, 2) }]
     };
+    response.code = [];
+    response.captureSnapshot = false;
+    response.waitForNetwork = false;
+    return;
   }
 });
 

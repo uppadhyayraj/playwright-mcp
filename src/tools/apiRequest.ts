@@ -62,7 +62,7 @@ const apiRequestTool = defineTool({
     inputSchema: apiRequestInputSchema,
     type: 'readOnly'
   },
-  async handle(ctx: any, input: any) {
+  async handle(ctx: any, input: any, response: any) {
     // --- Session Management ---
     const uuid = () => {
       if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function')
@@ -117,20 +117,20 @@ const apiRequestTool = defineTool({
         if (typeof data === 'string')
           data = renderTemplate(data, stepVars);
         // Execute request
-        const response = await context.fetch(url, {
+        const stepResponse = await context.fetch(url, {
           method: step.method || 'GET',
           headers,
           data
         });
 
-        const status = response.status();
-        const statusText = response.statusText();
-        const contentType = response.headers()['content-type'] || '';
+        const status = stepResponse.status();
+        const statusText = stepResponse.statusText();
+        const contentType = stepResponse.headers()['content-type'] || '';
         let responseBody;
         if (contentType.includes('application/json'))
-          responseBody = await response.json();
+          responseBody = await stepResponse.json();
         else
-          responseBody = await response.text();
+          responseBody = await stepResponse.text();
         // Validation
         const expect = step.expect || {};
         const validation = {
@@ -211,17 +211,16 @@ const apiRequestTool = defineTool({
         timestamp: new Date().toISOString()
       });
       session.status = 'completed';
-      return {
-        code: [],
-        resultOverride: {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({ sessionId, results }, null, 2)
-          }]
-        },
-        captureSnapshot: false,
-        waitForNetwork: false
+      response.resultOverride = {
+        content: [{
+          type: 'text',
+          text: JSON.stringify({ sessionId, results }, null, 2)
+        }]
       };
+      response.code = [];
+      response.captureSnapshot = false;
+      response.waitForNetwork = false;
+      return;
     }
     // --- SINGLE REQUEST MODE (legacy) ---
     const { method, url, headers, data, expect } = input;
@@ -232,20 +231,20 @@ const apiRequestTool = defineTool({
 
     const { request } = await import('playwright');
     const context = await request.newContext();
-    const response = await context.fetch(url, {
+    const fetchResponse = await context.fetch(url, {
       method: method || 'GET',
       headers,
       data
     });
 
-    const status = response.status();
-    const statusText = response.statusText();
-    const contentType = response.headers()['content-type'] || '';
+    const status = fetchResponse.status();
+    const statusText = fetchResponse.statusText();
+    const contentType = fetchResponse.headers()['content-type'] || '';
     let responseBody;
     if (contentType.includes('application/json'))
-      responseBody = await response.json();
+      responseBody = await fetchResponse.json();
     else
-      responseBody = await response.text();
+      responseBody = await fetchResponse.text();
 
     // Basic validation
     const validation = {
@@ -309,25 +308,24 @@ const apiRequestTool = defineTool({
     }
 
     await context.dispose();
-    return {
-      code: [],
-      resultOverride: {
-        content: [{
-          type: 'text',
-          text: JSON.stringify({
-            ok: validation.status && validation.contentType && bodyValidation.matched,
-            status,
-            statusText,
-            contentType,
-            body: responseBody,
-            validation,
-            bodyValidation
-          }, null, 2)
-        }]
-      },
-      captureSnapshot: false,
-      waitForNetwork: false
+    response.resultOverride = {
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          ok: validation.status && validation.contentType && bodyValidation.matched,
+          status,
+          statusText,
+          contentType,
+          body: responseBody,
+          validation,
+          bodyValidation
+        }, null, 2)
+      }]
     };
+    response.code = [];
+    response.captureSnapshot = false;
+    response.waitForNetwork = false;
+    return;
   }
 });
 export default [
