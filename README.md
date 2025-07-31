@@ -1,27 +1,21 @@
-## Playwright MCP
+## Playwright MCP - Enhanced for API Testing
 
-A Model Context Protocol (MCP) server that provides browser automation capabilities using [Playwright](https://playwright.dev). This server enables LLMs to interact with web pages through structured accessibility snapshots, bypassing the need for screenshots or visually-tuned models.
+This fork of the Playwright MCP server introduces powerful API testing capabilities, allowing integration with real-world API endpoints using [Playwright](https://playwright.dev).
 
-### Key Features
+### Key API Features
 
-- **Fast and lightweight**. Uses Playwright's accessibility tree, not pixel-based input.
-- **LLM-friendly**. No vision models needed, operates purely on structured data.
-- **Deterministic tool application**. Avoids ambiguity common with screenshot-based approaches.
+- **Comprehensive Method Support**: Perform HTTP API requests, including GET, POST, PUT, PATCH, and DELETE.
+- **Advanced Validation**: Validate responses with expected statuses, content-types, and body structures.
+- **Session Management**: Group related API calls using session IDs for organized reporting and debugging.
+- **Chained Requests**: Execute sequences of dependent API requests, using outputs from one step in subsequent ones.
 
-### Requirements
-- Node.js 18 or newer
-- VS Code, Cursor, Windsurf, Claude Desktop, Goose or any other MCP client
+### Original Features Reference
 
-<!--
-// Generate using:
-node utils/generate-links.js
--->
+The original Playwright MCP capabilities for browser automation remain intact and unchanged. Refer to the original documentation for full details on browser testing features.
 
-### Getting started
+### Installation
 
-First, install the Playwright MCP server with your client.
-
-**Standard config** works in most of the tools:
+Install the enhanced Playwright MCP server with API support (note the --caps parameter values):
 
 ```js
 {
@@ -29,110 +23,70 @@ First, install the Playwright MCP server with your client.
     "playwright": {
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest"
+        "@democratize-quality/playwright-mcp",
+        "--caps", 
+        "api_session_report,api_session_status,api_request"
       ]
     }
   }
 }
 ```
 
-[<img src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF" alt="Install in VS Code">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522playwright%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522%2540playwright%252Fmcp%2540latest%2522%255D%257D) [<img alt="Install in VS Code Insiders" src="https://img.shields.io/badge/VS_Code_Insiders-VS_Code_Insiders?style=flat-square&label=Install%20Server&color=24bfa5">](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522playwright%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522%2540playwright%252Fmcp%2540latest%2522%255D%257D)
+### Quick Start for API Testing
 
+1. **Basic Example**:
 
-<details>
-<summary>Claude Code</summary>
+   Use the `api_request` tool for performing a GET request:
 
-Use the Claude Code CLI to add the Playwright MCP server:
+   ```json
+   {
+     "method": "GET",
+     "url": "https://jsonplaceholder.typicode.com/posts/1"
+   }
+   ```
 
-```bash
-claude mcp add playwright npx @playwright/mcp@latest
-```
-</details>
+2. **Advanced Features**:
+   - **Validation**: 
+     ```json
+     {
+       "method": "GET",
+       "url": "https://jsonplaceholder.typicode.com/posts/1",
+       "expect": {
+         "status": 200,
+         "contentType": "application/json"
+       }
+     }
+     ```
 
-<details>
-<summary>Claude Desktop</summary>
+3. **Chained Requests**:
+   - Execute a login and retrieval sequence.
+     ```json
+     {
+       "chain": [
+         {
+           "name": "login",
+           "method": "POST",
+           "url": "https://reqres.in/api/login",
+           "headers": { "Content-Type": "application/json" },
+           "data": { "email": "eve.holt@reqres.in", "password": "cityslicka" },
+           "extract": { "token": "token" }
+         },
+         {
+           "name": "getUser",
+           "method": "GET",
+           "url": "https://reqres.in/api/users/2",
+           "headers": { "Authorization": "Bearer {{login.token}}" }
+         }
+       ]
+     }
+     ```
 
-Follow the MCP install [guide](https://modelcontextprotocol.io/quickstart/user), use the standard config above.
+For more detailed API usage examples and advanced scenarios, refer to the accompanying `api_tool_usage.md` guide.
 
-</details>
+### Requirements
 
-<details>
-<summary>Cursor</summary>
-
-#### Click the button to install:
-
-[![Install MCP Server](https://cursor.com/deeplink/mcp-install-dark.svg)](https://cursor.com/install-mcp?name=playwright&config=eyJjb21tYW5kIjoibnB4IEBwbGF5d3JpZ2h0L21jcEBsYXRlc3QifQ%3D%3D)
-
-#### Or install manually:
-
-Go to `Cursor Settings` -> `MCP` -> `Add new MCP Server`. Name to your liking, use `command` type with the command `npx @playwright/mcp`. You can also verify config or add command like arguments via clicking `Edit`.
-
-</details>
-
-<details>
-<summary>Gemini CLI</summary>
-
-Follow the MCP install [guide](https://github.com/google-gemini/gemini-cli/blob/main/docs/tools/mcp-server.md#configure-the-mcp-server-in-settingsjson), use the standard config above.
-
-</details>
-
-<details>
-<summary>Goose</summary>
-
-#### Click the button to install:
-
-[![Install in Goose](https://block.github.io/goose/img/extension-install-dark.svg)](https://block.github.io/goose/extension?cmd=npx&arg=%40playwright%2Fmcp%40latest&id=playwright&name=Playwright&description=Interact%20with%20web%20pages%20through%20structured%20accessibility%20snapshots%20using%20Playwright)
-
-#### Or install manually:
-
-Go to `Advanced settings` -> `Extensions` -> `Add custom extension`. Name to your liking, use type `STDIO`, and set the `command` to `npx @playwright/mcp`. Click "Add Extension".
-</details>
-
-<details>
-<summary>LM Studio</summary>
-
-#### Click the button to install:
-
-[![Add MCP Server playwright to LM Studio](https://files.lmstudio.ai/deeplink/mcp-install-light.svg)](https://lmstudio.ai/install-mcp?name=playwright&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyJAcGxheXdyaWdodC9tY3BAbGF0ZXN0Il19)
-
-#### Or install manually:
-
-Go to `Program` in the right sidebar -> `Install` -> `Edit mcp.json`. Use the standard config above.
-</details>
-
-<details>
-<summary>Qodo Gen</summary>
-
-Open [Qodo Gen](https://docs.qodo.ai/qodo-documentation/qodo-gen) chat panel in VSCode or IntelliJ → Connect more tools → + Add new MCP → Paste the standard config above.
-
-Click <code>Save</code>.
-</details>
-
-<details>
-<summary>VS Code</summary>
-
-#### Click the button to install:
-
-[<img src="https://img.shields.io/badge/VS_Code-VS_Code?style=flat-square&label=Install%20Server&color=0098FF" alt="Install in VS Code">](https://insiders.vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522playwright%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522%2540playwright%252Fmcp%2540latest%2522%255D%257D) [<img alt="Install in VS Code Insiders" src="https://img.shields.io/badge/VS_Code_Insiders-VS_Code_Insiders?style=flat-square&label=Install%20Server&color=24bfa5">](https://insiders.vscode.dev/redirect?url=vscode-insiders%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522playwright%2522%252C%2522command%2522%253A%2522npx%2522%252C%2522args%2522%253A%255B%2522%2540playwright%252Fmcp%2540latest%2522%255D%257D)
-
-#### Or install manually:
-
-Follow the MCP install [guide](https://code.visualstudio.com/docs/copilot/chat/mcp-servers#_add-an-mcp-server), use the standard config above. You can also install the Playwright MCP server using the VS Code CLI:
-
-```bash
-# For VS Code
-code --add-mcp '{"name":"playwright","command":"npx","args":["@playwright/mcp@latest"]}'
-```
-
-After installation, the Playwright MCP server will be available for use with your GitHub Copilot agent in VS Code.
-</details>
-
-<details>
-<summary>Windsurf</summary>
-
-Follow Windsurf MCP [documentation](https://docs.windsurf.com/windsurf/cascade/mcp). Use the standard config above.
-
-</details>
+- Node.js 18 or newer
+- VS Code, Cursor, Windsurf, Claude Desktop, Goose or any other MCP client
 
 ### Configuration
 
@@ -141,7 +95,7 @@ Playwright MCP server supports following arguments. They can be provided in the 
 <!--- Options generated by update-readme.js -->
 
 ```
-> npx @playwright/mcp@latest --help
+> npx @democratize-quality/playwright-mcp --help
   --allowed-origins <origins>  semicolon-separated list of origins to allow the
                                browser to request. Default is to allow all.
   --blocked-origins <origins>  semicolon-separated list of origins to block the
@@ -222,9 +176,11 @@ state [here](https://playwright.dev/docs/auth).
     "playwright": {
       "command": "npx",
       "args": [
-        "@playwright/mcp@latest",
+        "@democratize-quality/playwright-mcp",
         "--isolated",
-        "--storage-state={path/to/storage.json}"
+        "--storage-state={path/to/storage.json}",
+        "--caps",
+        "api_session_report,api_session_status,api_request"
       ]
     }
   }
@@ -237,82 +193,9 @@ The Playwright MCP server can be configured using a JSON configuration file. You
 using the `--config` command line option:
 
 ```bash
-npx @playwright/mcp@latest --config path/to/config.json
+npx @democratize-quality/playwright-mcp --config path/to/config.json --caps api_session_report,api_session_status,api_request
 ```
 
-<details>
-<summary>Configuration file schema</summary>
-
-```typescript
-{
-  // Browser configuration
-  browser?: {
-    // Browser type to use (chromium, firefox, or webkit)
-    browserName?: 'chromium' | 'firefox' | 'webkit';
-
-    // Keep the browser profile in memory, do not save it to disk.
-    isolated?: boolean;
-
-    // Path to user data directory for browser profile persistence
-    userDataDir?: string;
-
-    // Browser launch options (see Playwright docs)
-    // @see https://playwright.dev/docs/api/class-browsertype#browser-type-launch
-    launchOptions?: {
-      channel?: string;        // Browser channel (e.g. 'chrome')
-      headless?: boolean;      // Run in headless mode
-      executablePath?: string; // Path to browser executable
-      // ... other Playwright launch options
-    };
-
-    // Browser context options
-    // @see https://playwright.dev/docs/api/class-browser#browser-new-context
-    contextOptions?: {
-      viewport?: { width: number, height: number };
-      // ... other Playwright context options
-    };
-
-    // CDP endpoint for connecting to existing browser
-    cdpEndpoint?: string;
-
-    // Remote Playwright server endpoint
-    remoteEndpoint?: string;
-  },
-
-  // Server configuration
-  server?: {
-    port?: number;  // Port to listen on
-    host?: string;  // Host to bind to (default: localhost)
-  },
-
-  // List of additional capabilities
-  capabilities?: Array<
-    'tabs' |    // Tab management
-    'install' | // Browser installation
-    'pdf' |     // PDF generation
-    'vision' |  // Coordinate-based interactions
-  >;
-
-  // Directory for output files
-  outputDir?: string;
-
-  // Network configuration
-  network?: {
-    // List of origins to allow the browser to request. Default is to allow all. Origins matching both `allowedOrigins` and `blockedOrigins` will be blocked.
-    allowedOrigins?: string[];
-
-    // List of origins to block the browser to request. Origins matching both `allowedOrigins` and `blockedOrigins` will be blocked.
-    blockedOrigins?: string[];
-  };
- 
-  /**
-   * Whether to send image responses to the client. Can be "allow" or "omit". 
-   * Defaults to "allow".
-   */
-  imageResponses?: 'allow' | 'omit';
-}
-```
-</details>
 
 ### Standalone MCP server
 
@@ -320,7 +203,7 @@ When running headed browser on system w/o display or from worker processes of th
 run the MCP server from environment with the DISPLAY and pass the `--port` flag to enable HTTP transport.
 
 ```bash
-npx @playwright/mcp@latest --port 8931
+npx @democratize-quality/playwright-mcp --port 8931 --caps api_session_report,api_session_status,api_request
 ```
 
 And then in MCP client config, set the `url` to the HTTP endpoint:
@@ -358,32 +241,56 @@ docker build -t mcr.microsoft.com/playwright/mcp .
 ```
 </details>
 
-<details>
-<summary><b>Programmatic usage</b></summary>
-
-```js
-import http from 'http';
-
-import { createConnection } from '@playwright/mcp';
-import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
-
-http.createServer(async (req, res) => {
-  // ...
-
-  // Creates a headless Playwright MCP server with SSE transport
-  const connection = await createConnection({ browser: { launchOptions: { headless: true } } });
-  const transport = new SSEServerTransport('/messages', res);
-  await connection.sever.connect(transport);
-
-  // ...
-});
-```
-</details>
-
 ### Tools
 
 <!--- Tools generated by update-readme.js -->
+<details>
+<summary><b>API request tools (opt-in via --caps=api_request)</b></summary>
 
+<!-- NOTE: This has been generated via update-readme.js -->
+
+- **api_request**
+  - Title: API Request
+  - Description: Perform an HTTP API request and validate the response.
+  - Parameters:
+    - `sessionId` (string, optional): undefined
+    - `method` (string, optional): undefined
+    - `url` (string, optional): undefined
+    - `headers` (object, optional): undefined
+    - `data` (optional): undefined
+    - `expect` (object, optional): undefined
+    - `chain` (array, optional): undefined
+  - Read-only: **true**
+
+</details>
+
+<details>
+<summary><b>API session status (opt-in via --caps=api_session_status)</b></summary>
+
+<!-- NOTE: This has been generated via update-readme.js -->
+
+- **api_session_status**
+  - Title: API Session Status
+  - Description: Query API test session status, logs, and results by sessionId.
+  - Parameters:
+    - `sessionId` (string): undefined
+  - Read-only: **true**
+
+</details>
+
+<details>
+<summary><b>API session reporting (opt-in via --caps=api_session_report)</b></summary>
+
+<!-- NOTE: This has been generated via update-readme.js -->
+
+- **api_session_report**
+  - Title: API Session HTML Report
+  - Description: Generate and retrieve an HTML report for an API test session by sessionId.
+  - Parameters:
+    - `sessionId` (string): undefined
+  - Read-only: **true**
+
+</details>
 <details>
 <summary><b>Core automation</b></summary>
 
@@ -683,54 +590,5 @@ http.createServer(async (req, res) => {
   - Read-only: **true**
 
 </details>
-
-<details>
-<summary><b>API request tools (opt-in via --caps=api_request)</b></summary>
-
-<!-- NOTE: This has been generated via update-readme.js -->
-
-- **api_request**
-  - Title: API Request
-  - Description: Perform an HTTP API request and validate the response.
-  - Parameters:
-    - `sessionId` (string, optional): undefined
-    - `method` (string, optional): undefined
-    - `url` (string, optional): undefined
-    - `headers` (object, optional): undefined
-    - `data` (optional): undefined
-    - `expect` (object, optional): undefined
-    - `chain` (array, optional): undefined
-  - Read-only: **true**
-
-</details>
-
-<details>
-<summary><b>API session status (opt-in via --caps=api_session_status)</b></summary>
-
-<!-- NOTE: This has been generated via update-readme.js -->
-
-- **api_session_status**
-  - Title: API Session Status
-  - Description: Query API test session status, logs, and results by sessionId.
-  - Parameters:
-    - `sessionId` (string): undefined
-  - Read-only: **true**
-
-</details>
-
-<details>
-<summary><b>API session reporting (opt-in via --caps=api_session_report)</b></summary>
-
-<!-- NOTE: This has been generated via update-readme.js -->
-
-- **api_session_report**
-  - Title: API Session HTML Report
-  - Description: Generate and retrieve an HTML report for an API test session by sessionId.
-  - Parameters:
-    - `sessionId` (string): undefined
-  - Read-only: **true**
-
-</details>
-
 
 <!--- End of tools generated section -->

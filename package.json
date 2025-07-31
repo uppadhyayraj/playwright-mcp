@@ -1,6 +1,6 @@
 {
   "name": "@democratize-quality/playwright-mcp",
-  "version": "0.0.32",
+  "version": "0.1.32",
   "description": "Playwright Tools for MCP",
   "type": "module",
   "repository": {
