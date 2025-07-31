@@ -15,7 +15,7 @@
  */
 
 import { z } from 'zod';
-import { defineTool } from './tool.js';
+import { defineTool, defineTabTool } from './tool.js';
 
 const navigate = defineTool({
   capability: 'core',
@@ -30,24 +30,16 @@ const navigate = defineTool({
     type: 'destructive',
   },
 
-  handle: async (context, params) => {
+  handle: async (context, params, response) => {
     const tab = await context.ensureTab();
     await tab.navigate(params.url);
 
-    const code = [
-      `// Navigate to ${params.url}`,
-      `await page.goto('${params.url}');`,
-    ];
-
-    return {
-      code,
-      captureSnapshot: true,
-      waitForNetwork: false,
-    };
+    response.setIncludeSnapshot();
+    response.addCode(`await page.goto('${params.url}');`);
   },
 });
 
-const goBack = defineTool({
+const goBack = defineTabTool({
   capability: 'core',
   schema: {
     name: 'browser_navigate_back',
@@ -57,23 +49,14 @@ const goBack = defineTool({
     type: 'readOnly',
   },
 
-  handle: async context => {
-    const tab = await context.ensureTab();
+  handle: async (tab, params, response) => {
     await tab.page.goBack();
-    const code = [
-      `// Navigate back`,
-      `await page.goBack();`,
-    ];
-
-    return {
-      code,
-      captureSnapshot: true,
-      waitForNetwork: false,
-    };
+    response.setIncludeSnapshot();
+    response.addCode(`await page.goBack();`);
   },
 });
 
-const goForward = defineTool({
+const goForward = defineTabTool({
   capability: 'core',
   schema: {
     name: 'browser_navigate_forward',
@@ -82,18 +65,10 @@ const goForward = defineTool({
     inputSchema: z.object({}),
     type: 'readOnly',
   },
-  handle: async context => {
-    const tab = context.currentTabOrDie();
+  handle: async (tab, params, response) => {
     await tab.page.goForward();
-    const code = [
-      `// Navigate forward`,
-      `await page.goForward();`,
-    ];
-    return {
-      code,
-      captureSnapshot: true,
-      waitForNetwork: false,
-    };
+    response.setIncludeSnapshot();
+    response.addCode(`await page.goForward();`);
   },
 });
 

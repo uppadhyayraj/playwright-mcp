@@ -27,11 +27,12 @@ import { spawn } from 'child_process';
 import { WebSocket, WebSocketServer } from 'ws';
 import debug from 'debug';
 import * as playwright from 'playwright';
-import { httpAddressToString, startHttpServer } from '../transport.js';
-import { BrowserContextFactory } from '../browserContextFactory.js';
 // @ts-ignore
 const { registry } = await import('playwright-core/lib/server/registry/index');
-
+import { httpAddressToString, startHttpServer } from '../httpServer.js';
+import { logUnhandledError } from '../log.js';
+import { ManualPromise } from '../manualPromise.js';
+import type { BrowserContextFactory } from '../browserContextFactory.js';
 import type websocket from 'ws';
 
 const debugLogger = debug('pw:mcp:relay');
@@ -65,8 +66,8 @@ export class CDPRelayServer {
     // Page sessionId that should be used by this connection.
     sessionId: string;
   } | undefined;
-  private _extensionConnectionPromise: Promise<void>;
-  private _extensionConnectionResolve: (() => void) | null = null;
+  private _nextSessionId: number = 1;
+  private _extensionConnectionPromise!: ManualPromise<void>;
 
   constructor(server: http.Server, browserChannel: string) {
     this._wsHost = httpAddressToString(server.address()).replace(/^http/, 'ws');
@@ -76,9 +77,7 @@ export class CDPRelayServer {
     this._cdpPath = `/cdp/${uuid}`;
     this._extensionPath = `/extension/${uuid}`;
 
-    this._extensionConnectionPromise = new Promise(resolve => {
-      this._extensionConnectionResolve = resolve;
-    });
+    this._resetExtensionConnection();
     this._wss = new WebSocketServer({ server });
     this._wss.on('connection', this._onConnection.bind(this));
   }
@@ -104,7 +103,7 @@ export class CDPRelayServer {
   private async _connectBrowser(clientInfo: { name: string, version: string }) {
     const mcpRelayEndpoint = `${this._wsHost}${this._extensionPath}`;
     // Need to specify "key" in the manifest.json to make the id stable when loading from file.
-    const url = new URL('chrome-extension://jakfalbnbhgkpmoaakfflhflbfpkailf/connect.html');
+    const url = new URL('chrome-extension://jakfalbnbhgkpmoaakfflhflbfpkailf/lib/ui/connect.html');
     url.searchParams.set('mcpRelayUrl', mcpRelayEndpoint);
     url.searchParams.set('client', JSON.stringify(clientInfo));
     const href = url.toString();
@@ -124,8 +123,13 @@ export class CDPRelayServer {
   }
 
   stop(): void {
-    this._playwrightConnection?.close();
-    this._extensionConnection?.close();
+    this.closeConnections('Server stopped');
+    this._wss.close();
+  }
+
+  closeConnections(reason: string) {
+    this._closePlaywrightConnection(reason);
+    this._closeExtensionConnection(reason);
   }
 
   private _onConnection(ws: WebSocket, request: http.IncomingMessage): void {
@@ -142,21 +146,26 @@ export class CDPRelayServer {
   }
 
   private _handlePlaywrightConnection(ws: WebSocket): void {
+    if (this._playwrightConnection) {
+      debugLogger('Rejecting second Playwright connection');
+      ws.close(1000, 'Another CDP client already connected');
+      return;
+    }
     this._playwrightConnection = ws;
     ws.on('message', async data => {
       try {
         const message = JSON.parse(data.toString());
         await this._handlePlaywrightMessage(message);
-      } catch (error) {
-        debugLogger('Error parsing Playwright message:', error);
+      } catch (error: any) {
+        debugLogger(`Error while handling Playwright message\n${data.toString()}\n`, error);
       }
     });
     ws.on('close', () => {
-      if (this._playwrightConnection === ws) {
-        this._playwrightConnection = null;
-        this._closeExtensionConnection();
-        debugLogger('Playwright MCP disconnected');
-      }
+      if (this._playwrightConnection !== ws)
+        return;
+      this._playwrightConnection = null;
+      this._closeExtensionConnection('Playwright client disconnected');
+      debugLogger('Playwright WebSocket closed');
     });
     ws.on('error', error => {
       debugLogger('Playwright WebSocket error:', error);
@@ -164,13 +173,23 @@ export class CDPRelayServer {
     debugLogger('Playwright MCP connected');
   }
 
-  private _closeExtensionConnection() {
+  private _closeExtensionConnection(reason: string) {
+    this._extensionConnection?.close(reason);
+    this._extensionConnectionPromise.reject(new Error(reason));
+    this._resetExtensionConnection();
+  }
+
+  private _resetExtensionConnection() {
     this._connectedTabInfo = undefined;
-    this._extensionConnection?.close();
     this._extensionConnection = null;
-    this._extensionConnectionPromise = new Promise(resolve => {
-      this._extensionConnectionResolve = resolve;
-    });
+    this._extensionConnectionPromise = new ManualPromise();
+    void this._extensionConnectionPromise.catch(logUnhandledError);
+  }
+
+  private _closePlaywrightConnection(reason: string) {
+    if (this._playwrightConnection?.readyState === WebSocket.OPEN)
+      this._playwrightConnection.close(1000, reason);
+    this._playwrightConnection = null;
   }
 
   private _handleExtensionConnection(ws: WebSocket): void {
@@ -179,19 +198,23 @@ export class CDPRelayServer {
       return;
     }
     this._extensionConnection = new ExtensionConnection(ws);
-    this._extensionConnection.onclose = c => {
-      if (this._extensionConnection === c)
-        this._extensionConnection = null;
+    this._extensionConnection.onclose = (c, reason) => {
+      debugLogger('Extension WebSocket closed:', reason, c === this._extensionConnection);
+      if (this._extensionConnection !== c)
+        return;
+      this._resetExtensionConnection();
+      this._closePlaywrightConnection(`Extension disconnected: ${reason}`);
     };
     this._extensionConnection.onmessage = this._handleExtensionMessage.bind(this);
-    this._extensionConnectionResolve?.();
+    this._extensionConnectionPromise.resolve();
   }
 
   private _handleExtensionMessage(method: string, params: any) {
     switch (method) {
       case 'forwardCDPEvent':
+        const sessionId = params.sessionId || this._connectedTabInfo?.sessionId;
         this._sendToPlaywright({
-          sessionId: params.sessionId,
+          sessionId,
           method: params.method,
           params: params.params
         });
@@ -205,89 +228,70 @@ export class CDPRelayServer {
 
   private async _handlePlaywrightMessage(message: CDPCommand): Promise<void> {
     debugLogger('← Playwright:', `${message.method} (id=${message.id})`);
-    if (!this._extensionConnection) {
-      debugLogger('Extension not connected, sending error to Playwright');
-      this._sendToPlaywright({
-        id: message.id,
-        error: { message: 'Extension not connected' }
-      });
-      return;
-    }
-    if (await this._interceptCDPCommand(message))
-      return;
-    await this._forwardToExtension(message);
-  }
-
-  private async _interceptCDPCommand(message: CDPCommand): Promise<boolean> {
-    switch (message.method) {
-      case 'Browser.getVersion': {
-        this._sendToPlaywright({
-          id: message.id,
-          result: {
-            protocolVersion: '1.3',
-            product: 'Chrome/Extension-Bridge',
-            userAgent: 'CDP-Bridge-Server/1.0.0',
-          }
-        });
-        return true;
-      }
-      case 'Browser.setDownloadBehavior': {
-        this._sendToPlaywright({
-          id: message.id
-        });
-        return true;
-      }
-      case 'Target.setAutoAttach': {
-        // Simulate auto-attach behavior with real target info
-        if (!message.sessionId) {
-          this._connectedTabInfo = await this._extensionConnection!.send('attachToTab');
-          debugLogger('Simulating auto-attach for target:', message);
-          this._sendToPlaywright({
-            method: 'Target.attachedToTarget',
-            params: {
-              sessionId: this._connectedTabInfo!.sessionId,
-              targetInfo: {
-                ...this._connectedTabInfo!.targetInfo,
-                attached: true,
-              },
-              waitingForDebugger: false
-            }
-          });
-          this._sendToPlaywright({
-            id: message.id
-          });
-        } else {
-          await this._forwardToExtension(message);
-        }
-        return true;
-      }
-      case 'Target.getTargetInfo': {
-        debugLogger('Target.getTargetInfo', message);
-        this._sendToPlaywright({
-          id: message.id,
-          result: this._connectedTabInfo?.targetInfo
-        });
-        return true;
-      }
-    }
-    return false;
-  }
-
-  private async _forwardToExtension(message: CDPCommand): Promise<void> {
+    const { id, sessionId, method, params } = message;
     try {
-      if (!this._extensionConnection)
-        throw new Error('Extension not connected');
-      const { id, sessionId, method, params } = message;
-      const result = await this._extensionConnection.send('forwardCDPCommand', { sessionId, method, params });
+      const result = await this._handleCDPCommand(method, params, sessionId);
       this._sendToPlaywright({ id, sessionId, result });
     } catch (e) {
       debugLogger('Error in the extension:', e);
       this._sendToPlaywright({
-        id: message.id,
-        sessionId: message.sessionId,
+        id,
+        sessionId,
         error: { message: (e as Error).message }
       });
     }
+  }
+
+  private async _handleCDPCommand(method: string, params: any, sessionId: string | undefined): Promise<any> {
+    switch (method) {
+      case 'Browser.getVersion': {
+        return {
+          protocolVersion: '1.3',
+          product: 'Chrome/Extension-Bridge',
+          userAgent: 'CDP-Bridge-Server/1.0.0',
+        };
+      }
+      case 'Browser.setDownloadBehavior': {
+        return { };
+      }
+      case 'Target.setAutoAttach': {
+        // Forward child session handling.
+        if (sessionId)
+          break;
+        // Simulate auto-attach behavior with real target info
+        const { targetInfo } = await this._extensionConnection!.send('attachToTab');
+        this._connectedTabInfo = {
+          targetInfo,
+          sessionId: `pw-tab-${this._nextSessionId++}`,
+        };
+        debugLogger('Simulating auto-attach');
+        this._sendToPlaywright({
+          method: 'Target.attachedToTarget',
+          params: {
+            sessionId: this._connectedTabInfo.sessionId,
+            targetInfo: {
+              ...this._connectedTabInfo.targetInfo,
+              attached: true,
+            },
+            waitingForDebugger: false
+          }
+        });
+        return { };
+      }
+      case 'Target.getTargetInfo': {
+        return this._connectedTabInfo?.targetInfo;
+      }
+    }
+    return await this._forwardToExtension(method, params, sessionId);
+  }
+
+  private async _forwardToExtension(method: string, params: any, sessionId: string | undefined): Promise<any> {
+    if (!this._extensionConnection)
+      throw new Error('Extension not connected');
+    // Top level sessionId is only passed between the relay and the client.
+    if (this._connectedTabInfo?.sessionId === sessionId)
+      sessionId = undefined;
+    return await this._extensionConnection.send('forwardCDPCommand', { sessionId, method, params });
   }
 
   private _sendToPlaywright(message: CDPResponse): void {
@@ -311,31 +315,51 @@ class ExtensionContextFactory implements BrowserContextFactory {
     const browser = await this._browserPromise;
     return {
       browserContext: browser.contexts()[0],
-      close: async () => {}
+      close: async () => {
+        debugLogger('close() called for browser context, ignoring');
+      }
     };
+  }
+
+  clientDisconnected() {
+    this._relay.closeConnections('MCP client disconnected');
+    this._browserPromise = undefined;
   }
 
   private async _obtainBrowser(clientInfo: { name: string, version: string }): Promise<playwright.Browser> {
     await this._relay.ensureExtensionConnectionForMCPContext(clientInfo);
-    return await playwright.chromium.connectOverCDP(this._relay.cdpEndpoint());
+    const browser = await playwright.chromium.connectOverCDP(this._relay.cdpEndpoint());
+    browser.on('disconnected', () => {
+      this._browserPromise = undefined;
+      debugLogger('Browser disconnected');
+    });
+    return browser;
   }
 }
 
-export async function startCDPRelayServer(port: number, browserChannel: string) {
-  const httpServer = await startHttpServer({ port });
+export async function startCDPRelayServer(browserChannel: string, abortController: AbortController) {
+  const httpServer = await startHttpServer({});
   const cdpRelayServer = new CDPRelayServer(httpServer, browserChannel);
-  process.on('exit', () => cdpRelayServer.stop());
+  abortController.signal.addEventListener('abort', () => cdpRelayServer.stop());
   debugLogger(`CDP relay server started, extension endpoint: ${cdpRelayServer.extensionEndpoint()}.`);
   return new ExtensionContextFactory(cdpRelayServer);
 }
 
+type ExtensionResponse = {
+  id?: number;
+  method?: string;
+  params?: any;
+  result?: any;
+  error?: string;
+};
+
 class ExtensionConnection {
   private readonly _ws: WebSocket;
-  private readonly _callbacks = new Map<number, { resolve: (o: any) => void, reject: (e: Error) => void }>();
+  private readonly _callbacks = new Map<number, { resolve: (o: any) => void, reject: (e: Error) => void, error: Error }>();
   private _lastId = 0;
 
   onmessage?: (method: string, params: any) => void;
-  onclose?: (self: ExtensionConnection) => void;
+  onclose?: (self: ExtensionConnection, reason: string) => void;
 
   constructor(ws: WebSocket) {
     this._ws = ws;
@@ -349,15 +373,16 @@ class ExtensionConnection {
       throw new Error(`Unexpected WebSocket state: ${this._ws.readyState}`);
     const id = ++this._lastId;
     this._ws.send(JSON.stringify({ id, method, params, sessionId }));
+    const error = new Error(`Protocol error: ${method}`);
     return new Promise((resolve, reject) => {
-      this._callbacks.set(id, { resolve, reject });
+      this._callbacks.set(id, { resolve, reject, error });
     });
   }
 
-  close(message?: string) {
+  close(message: string) {
     debugLogger('closing extension connection:', message);
-    this._ws.close(1000, message ?? 'Connection closed');
-    this.onclose?.(this);
+    if (this._ws.readyState === WebSocket.OPEN)
+      this._ws.close(1000, message);
   }
 
   private _onMessage(event: websocket.RawData) {
@@ -378,24 +403,28 @@ class ExtensionConnection {
     }
   }
 
-  private _handleParsedMessage(object: any) {
+  private _handleParsedMessage(object: ExtensionResponse) {
     if (object.id && this._callbacks.has(object.id)) {
       const callback = this._callbacks.get(object.id)!;
       this._callbacks.delete(object.id);
-      if (object.error)
-        callback.reject(new Error(object.error.message));
-      else
+      if (object.error) {
+        const error = callback.error;
+        error.message = object.error;
+        callback.reject(error);
+      } else {
         callback.resolve(object.result);
+      }
     } else if (object.id) {
       debugLogger('← Extension: unexpected response', object);
     } else {
-      this.onmessage?.(object.method, object.params);
+      this.onmessage?.(object.method!, object.params);
     }
   }
 
   private _onClose(event: websocket.CloseEvent) {
     debugLogger(`<ws closed> code=${event.code} reason=${event.reason}`);
     this._dispose();
+    this.onclose?.(this, event.reason);
   }
 
   private _onError(event: websocket.ErrorEvent) {

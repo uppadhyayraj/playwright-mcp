@@ -8,8 +8,13 @@
     "rootDir": "src",
     "outDir": "./lib",
     "resolveJsonModule": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
   },
   "include": [
     "src",
   ],
+  "exclude": [
+    "src/ui",
+  ]
 }

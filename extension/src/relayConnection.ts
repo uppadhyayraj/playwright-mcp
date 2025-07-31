@@ -37,13 +37,13 @@ type ProtocolResponse = {
 };
 
 export class RelayConnection {
-  private _debuggee: chrome.debugger.Debuggee = {};
-  private _rootSessionId = '';
+  private _debuggee: chrome.debugger.Debuggee;
   private _ws: WebSocket;
   private _eventListener: (source: chrome.debugger.DebuggerSession, method: string, params: any) => void;
   private _detachListener: (source: chrome.debugger.Debuggee, reason: string) => void;
 
-  constructor(ws: WebSocket) {
+  constructor(ws: WebSocket, tabId: number) {
+    this._debuggee = { tabId };
     this._ws = ws;
     this._ws.onmessage = this._onMessage.bind(this);
     // Store listeners for cleanup
@@ -53,20 +53,10 @@ export class RelayConnection {
     chrome.debugger.onDetach.addListener(this._detachListener);
   }
 
-  setConnectedTabId(tabId: number | null): void {
-    if (!tabId) {
-      this._debuggee = { };
-      this._rootSessionId = '';
-      return;
-    }
-    this._debuggee = { tabId };
-    this._rootSessionId = `pw-tab-${tabId}`;
-  }
-
-  close(message?: string): void {
+  close(message: string): void {
     chrome.debugger.onEvent.removeListener(this._eventListener);
     chrome.debugger.onDetach.removeListener(this._detachListener);
-    this._ws.close(1000, message || 'Connection closed');
+    this._ws.close(1000, message);
   }
 
   private async _detachDebugger(): Promise<void> {
@@ -77,7 +67,7 @@ export class RelayConnection {
     if (source.tabId !== this._debuggee.tabId)
       return;
     debugLog('Forwarding CDP event:', method, params);
-    const sessionId = source.sessionId || this._rootSessionId;
+    const sessionId = source.sessionId;
     this._sendMessage({
       method: 'forwardCDPEvent',
       params: {
@@ -98,6 +88,7 @@ export class RelayConnection {
         reason,
       },
     });
+    this._debuggee = { };
   }
 
   private _onMessage(event: MessageEvent): void {
@@ -137,7 +128,6 @@ export class RelayConnection {
       await chrome.debugger.attach(this._debuggee, '1.3');
       const result: any = await chrome.debugger.sendCommand(this._debuggee, 'Target.getTargetInfo');
       return {
-        sessionId: this._rootSessionId,
         targetInfo: result?.targetInfo,
       };
     }
@@ -148,10 +138,10 @@ export class RelayConnection {
     if (message.method === 'forwardCDPCommand') {
       const { sessionId, method, params } = message.params;
       debugLog('CDP command:', method, params);
-      const debuggerSession: chrome.debugger.DebuggerSession = { ...this._debuggee };
-      // Pass session id, unless it's the root session.
-      if (sessionId && sessionId !== this._rootSessionId)
-        debuggerSession.sessionId = sessionId;
+      const debuggerSession: chrome.debugger.DebuggerSession = {
+        ...this._debuggee,
+        sessionId,
+      };
       // Forward CDP command to chrome.debugger
       return await chrome.debugger.sendCommand(
           debuggerSession,

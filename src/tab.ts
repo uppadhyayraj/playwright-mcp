@@ -14,24 +14,49 @@
  * limitations under the License.
  */
 
+import { EventEmitter } from 'events';
 import * as playwright from 'playwright';
-
-import { PageSnapshot } from './pageSnapshot.js';
-import { callOnPageNoTrace } from './tools/utils.js';
+import { callOnPageNoTrace, waitForCompletion } from './tools/utils.js';
 import { logUnhandledError } from './log.js';
+import { ManualPromise } from './manualPromise.js';
+import { ModalState } from './tools/tool.js';
+import { outputFile } from './config.js';
 
 import type { Context } from './context.js';
 
-export class Tab {
+type PageEx = playwright.Page & {
+  _snapshotForAI: () => Promise<string>;
+};
+
+export const TabEvents = {
+  modalState: 'modalState'
+};
+
+export type TabEventsInterface = {
+  [TabEvents.modalState]: [modalState: ModalState];
+};
+
+export type TabSnapshot = {
+  url: string;
+  title: string;
+  ariaSnapshot: string;
+  modalStates: ModalState[];
+  consoleMessages: ConsoleMessage[];
+  downloads: { download: playwright.Download, finished: boolean, outputFile: string }[];
+};
+
+export class Tab extends EventEmitter<TabEventsInterface> {
   readonly context: Context;
   readonly page: playwright.Page;
   private _consoleMessages: ConsoleMessage[] = [];
   private _recentConsoleMessages: ConsoleMessage[] = [];
   private _requests: Map<playwright.Request, playwright.Response | null> = new Map();
-  private _snapshot: PageSnapshot | undefined;
   private _onPageClose: (tab: Tab) => void;
+  private _modalStates: ModalState[] = [];
+  private _downloads: { download: playwright.Download, finished: boolean, outputFile: string }[] = [];
 
   constructor(context: Context, page: playwright.Page, onPageClose: (tab: Tab) => void) {
+    super();
     this.context = context;
     this.page = page;
     this._onPageClose = onPageClose;
@@ -41,18 +66,59 @@ export class Tab {
     page.on('response', response => this._requests.set(response.request(), response));
     page.on('close', () => this._onClose());
     page.on('filechooser', chooser => {
-      this.context.setModalState({
+      this.setModalState({
         type: 'fileChooser',
         description: 'File chooser',
         fileChooser: chooser,
-      }, this);
+      });
     });
-    page.on('dialog', dialog => this.context.dialogShown(this, dialog));
+    page.on('dialog', dialog => this._dialogShown(dialog));
     page.on('download', download => {
-      void this.context.downloadStarted(this, download);
+      void this._downloadStarted(download);
     });
     page.setDefaultNavigationTimeout(60000);
     page.setDefaultTimeout(5000);
+    (page as any)[tabSymbol] = this;
+  }
+
+  static forPage(page: playwright.Page): Tab | undefined {
+    return (page as any)[tabSymbol];
+  }
+
+  modalStates(): ModalState[] {
+    return this._modalStates;
+  }
+
+  setModalState(modalState: ModalState) {
+    this._modalStates.push(modalState);
+    this.emit(TabEvents.modalState, modalState);
+  }
+
+  clearModalState(modalState: ModalState) {
+    this._modalStates = this._modalStates.filter(state => state !== modalState);
+  }
+
+  modalStatesMarkdown(): string[] {
+    return renderModalStates(this.context, this.modalStates());
+  }
+
+  private _dialogShown(dialog: playwright.Dialog) {
+    this.setModalState({
+      type: 'dialog',
+      description: `"${dialog.type()}" dialog with message "${dialog.message()}"`,
+      dialog,
+    });
+  }
+
+  private async _downloadStarted(download: playwright.Download) {
+    const entry = {
+      download,
+      finished: false,
+      outputFile: await outputFile(this.context.config, download.suggestedFilename())
+    };
+    this._downloads.push(entry);
+    await download.saveAs(entry.outputFile);
+    entry.finished = true;
   }
 
   private _clearCollectedArtifacts() {
@@ -95,24 +161,17 @@ export class Tab {
       // on chromium, the download event is fired *after* page.goto rejects, so we wait a lil bit
       const download = await Promise.race([
         downloadEvent,
-        new Promise(resolve => setTimeout(resolve, 1000)),
+        new Promise(resolve => setTimeout(resolve, 3000)),
       ]);
       if (!download)
         throw e;
+      // Make sure other "download" listeners are notified first.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      return;
     }
 
     // Cap load event to 5 seconds, the page is operational at this point.
     await this.waitForLoadState('load', { timeout: 5000 });
-  }
-
-  hasSnapshot(): boolean {
-    return !!this._snapshot;
-  }
-
-  snapshotOrDie(): PageSnapshot {
-    if (!this._snapshot)
-      throw new Error('No snapshot available');
-    return this._snapshot;
   }
 
   consoleMessages(): ConsoleMessage[] {
@@ -123,14 +182,74 @@ export class Tab {
     return this._requests;
   }
 
-  async captureSnapshot() {
-    this._snapshot = await PageSnapshot.create(this.page);
+  async captureSnapshot(): Promise<{ tabSnapshot?: TabSnapshot, modalState?: ModalState }> {
+    let tabSnapshot: TabSnapshot | undefined;
+    const modalState = await this._raceAgainstModalStates(async () => {
+      const snapshot = await (this.page as PageEx)._snapshotForAI();
+      tabSnapshot = {
+        url: this.page.url(),
+        title: await this.page.title(),
+        ariaSnapshot: snapshot,
+        modalStates: this.modalStates(),
+        consoleMessages: [],
+        downloads: this._downloads,
+      };
+    });
+    if (tabSnapshot) {
+      // Assign console message late so that we did not lose any to modal state.
+      tabSnapshot.consoleMessages = this._recentConsoleMessages;
+      this._recentConsoleMessages = [];
+    }
+    return { tabSnapshot, modalState };
   }
 
-  takeRecentConsoleMessages(): ConsoleMessage[] {
-    const result = this._recentConsoleMessages.slice();
-    this._recentConsoleMessages.length = 0;
-    return result;
+  private _javaScriptBlocked(): boolean {
+    return this._modalStates.some(state => state.type === 'dialog');
+  }
+
+  private async _raceAgainstModalStates(action: () => Promise<void>): Promise<ModalState | undefined> {
+    if (this.modalStates().length)
+      return this.modalStates()[0];
+
+    const promise = new ManualPromise<ModalState>();
+    const listener = (modalState: ModalState) => promise.resolve(modalState);
+    this.once(TabEvents.modalState, listener);
+
+    return await Promise.race([
+      action().then(() => {
+        this.off(TabEvents.modalState, listener);
+        return undefined;
+      }),
+      promise,
+    ]);
+  }
+
+  async waitForCompletion(callback: () => Promise<void>) {
+    await this._raceAgainstModalStates(() => waitForCompletion(this, callback));
+  }
+
+  async refLocator(params: { element: string, ref: string }): Promise<playwright.Locator> {
+    return (await this.refLocators([params]))[0];
+  }
+
+  async refLocators(params: { element: string, ref: string }[]): Promise<playwright.Locator[]> {
+    const snapshot = await (this.page as PageEx)._snapshotForAI();
+    return params.map(param => {
+      if (!snapshot.includes(`[ref=${param.ref}]`))
+        throw new Error(`Ref ${param.ref} not found in the current page snapshot. Try capturing new snapshot.`);
+      return this.page.locator(`aria-ref=${param.ref}`).describe(param.element);
+    });
+  }
+
+  async waitForTimeout(time: number) {
+    if (this._javaScriptBlocked()) {
+      await new Promise(f => setTimeout(f, time));
+      return;
+    }
+
+    await callOnPageNoTrace(this.page, page => {
+      return page.evaluate(() => new Promise(f => setTimeout(f, 1000)));
+    });
   }
 }
 
@@ -162,3 +281,16 @@ function pageErrorToConsoleMessage(errorOrValue: Error | any): ConsoleMessage {
     toString: () => String(errorOrValue),
   };
 }
+
+export function renderModalStates(context: Context, modalStates: ModalState[]): string[] {
+  const result: string[] = ['### Modal state'];
+  if (modalStates.length === 0)
+    result.push('- There is no modal state present');
+  for (const state of modalStates) {
+    const tool = context.tools.filter(tool => 'clearsModalState' in tool).find(tool => tool.clearsModalState === state.type);
+    result.push(`- [${state.description}]: can be handled by the "${tool?.schema.name}" tool`);
+  }
+  return result;
+}
+
+const tabSymbol = Symbol('tabSymbol');

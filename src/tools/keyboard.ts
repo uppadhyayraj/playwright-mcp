@@ -16,12 +16,12 @@
 
 import { z } from 'zod';
 
-import { defineTool } from './tool.js';
+import { defineTabTool } from './tool.js';
 import { elementSchema } from './snapshot.js';
 import { generateLocator } from './utils.js';
 import * as javascript from '../javascript.js';
 
-const pressKey = defineTool({
+const pressKey = defineTabTool({
   capability: 'core',
 
   schema: {
@@ -34,22 +34,14 @@ const pressKey = defineTool({
     type: 'destructive',
   },
 
-  handle: async (context, params) => {
-    const tab = context.currentTabOrDie();
+  handle: async (tab, params, response) => {
+    response.setIncludeSnapshot();
+    response.addCode(`// Press ${params.key}`);
+    response.addCode(`await page.keyboard.press('${params.key}');`);
 
-    const code = [
-      `// Press ${params.key}`,
-      `await page.keyboard.press('${params.key}');`,
-    ];
-
-    const action = () => tab.page.keyboard.press(params.key);
-
-    return {
-      code,
-      action,
-      captureSnapshot: true,
-      waitForNetwork: true
-    };
+    await tab.waitForCompletion(async () => {
+      await tab.page.keyboard.press(params.key);
+    });
   },
 });
 
@@ -59,7 +51,7 @@ const typeSchema = elementSchema.extend({
   slowly: z.boolean().optional().describe('Whether to type one character at a time. Useful for triggering key handlers in the page. By default entire text is filled in at once.'),
 });
 
-const type = defineTool({
+const type = defineTabTool({
   capability: 'core',
   schema: {
     name: 'browser_type',
@@ -69,35 +61,25 @@ const type = defineTool({
     type: 'destructive',
   },
 
-  handle: async (context, params) => {
-    const snapshot = context.currentTabOrDie().snapshotOrDie();
-    const locator = snapshot.refLocator(params);
+  handle: async (tab, params, response) => {
+    const locator = await tab.refLocator(params);
 
-    const code: string[] = [];
-    const steps: (() => Promise<void>)[] = [];
+    await tab.waitForCompletion(async () => {
+      if (params.slowly) {
+        response.setIncludeSnapshot();
+        response.addCode(`await page.${await generateLocator(locator)}.pressSequentially(${javascript.quote(params.text)});`);
+        await locator.pressSequentially(params.text);
+      } else {
+        response.addCode(`await page.${await generateLocator(locator)}.fill(${javascript.quote(params.text)});`);
+        await locator.fill(params.text);
+      }
 
-    if (params.slowly) {
-      code.push(`// Press "${params.text}" sequentially into "${params.element}"`);
-      code.push(`await page.${await generateLocator(locator)}.pressSequentially(${javascript.quote(params.text)});`);
-      steps.push(() => locator.pressSequentially(params.text));
-    } else {
-      code.push(`// Fill "${params.text}" into "${params.element}"`);
-      code.push(`await page.${await generateLocator(locator)}.fill(${javascript.quote(params.text)});`);
-      steps.push(() => locator.fill(params.text));
-    }
-
-    if (params.submit) {
-      code.push(`// Submit text`);
-      code.push(`await page.${await generateLocator(locator)}.press('Enter');`);
-      steps.push(() => locator.press('Enter'));
-    }
-
-    return {
-      code,
-      action: () => steps.reduce((acc, step) => acc.then(step), Promise.resolve()),
-      captureSnapshot: true,
-      waitForNetwork: true,
-    };
+      if (params.submit) {
+        response.setIncludeSnapshot();
+        response.addCode(`await page.${await generateLocator(locator)}.press('Enter');`);
+        await locator.press('Enter');
+      }
+    });
   },
 });
 

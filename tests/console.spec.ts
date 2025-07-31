@@ -37,10 +37,10 @@ test('browser_console_messages', async ({ client, server }) => {
   const resource = await client.callTool({
     name: 'browser_console_messages',
   });
-  expect(resource).toHaveTextContent([
-    `[LOG] Hello, world! @ ${server.PREFIX}:4`,
-    `[ERROR] Error @ ${server.PREFIX}:5`,
-  ].join('\n'));
+  expect(resource).toHaveResponse({
+    result: `[LOG] Hello, world! @ ${server.PREFIX}:4
+[ERROR] Error @ ${server.PREFIX}:5`,
+  });
 });
 
 test('browser_console_messages (page error)', async ({ client, server }) => {
@@ -63,8 +63,12 @@ test('browser_console_messages (page error)', async ({ client, server }) => {
   const resource = await client.callTool({
     name: 'browser_console_messages',
   });
-  expect(resource).toHaveTextContent(/Error: Error in script/);
-  expect(resource).toHaveTextContent(new RegExp(server.PREFIX));
+  expect(resource).toHaveResponse({
+    result: expect.stringContaining(`Error: Error in script`),
+  });
+  expect(resource).toHaveResponse({
+    result: expect.stringContaining(server.PREFIX),
+  });
 });
 
 test('recent console messages', async ({ client, server }) => {
@@ -90,7 +94,7 @@ test('recent console messages', async ({ client, server }) => {
     },
   });
 
-  expect(response).toContainTextContent(`
-### New console messages
-- [LOG] Hello, world! @`);
+  expect(response).toHaveResponse({
+    consoleMessages: expect.stringContaining(`- [LOG] Hello, world! @`),
+  });
 });

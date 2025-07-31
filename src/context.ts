@@ -17,18 +17,14 @@
 import debug from 'debug';
 import * as playwright from 'playwright';
 
-import { callOnPageNoTrace, waitForCompletion } from './tools/utils.js';
-import { ManualPromise } from './manualPromise.js';
+import { logUnhandledError } from './log.js';
 import { Tab } from './tab.js';
-import { outputFile } from './config.js';
 
-import type { ModalState, Tool, ToolActionResult } from './tools/tool.js';
+import type { Tool } from './tools/tool.js';
 import type { FullConfig } from './config.js';
 import type { BrowserContextFactory } from './browserContextFactory.js';
-
-type PendingAction = {
-  dialogShown: ManualPromise<void>;
-};
+import type * as actions from './actions.js';
+import type { Action, SessionLog } from './sessionLog.js';
 
 const testDebug = debug('pw:mcp:test');
 
@@ -39,54 +35,38 @@ export class Context {
   private _browserContextFactory: BrowserContextFactory;
   private _tabs: Tab[] = [];
   private _currentTab: Tab | undefined;
-  private _modalStates: (ModalState & { tab: Tab })[] = [];
-  private _pendingAction: PendingAction | undefined;
-  private _downloads: { download: playwright.Download, finished: boolean, outputFile: string }[] = [];
+
   clientVersion: { name: string; version: string; } | undefined;
 
-  constructor(tools: Tool[], config: FullConfig, browserContextFactory: BrowserContextFactory) {
+  private static _allContexts: Set<Context> = new Set();
+  private _closeBrowserContextPromise: Promise<void> | undefined;
+  private _inputRecorder: InputRecorder | undefined;
+  private _sessionLog: SessionLog | undefined;
+
+  constructor(tools: Tool[], config: FullConfig, browserContextFactory: BrowserContextFactory, sessionLog: SessionLog | undefined) {
     this.tools = tools;
     this.config = config;
     this._browserContextFactory = browserContextFactory;
+    this._sessionLog = sessionLog;
     testDebug('create context');
+    Context._allContexts.add(this);
   }
 
-  clientSupportsImages(): boolean {
-    if (this.config.imageResponses === 'omit')
-      return false;
-    return true;
-  }
-
-  modalStates(): ModalState[] {
-    return this._modalStates;
-  }
-
-  setModalState(modalState: ModalState, inTab: Tab) {
-    this._modalStates.push({ ...modalState, tab: inTab });
-  }
-
-  clearModalState(modalState: ModalState) {
-    this._modalStates = this._modalStates.filter(state => state !== modalState);
-  }
-
-  modalStatesMarkdown(): string[] {
-    const result: string[] = ['### Modal state'];
-    if (this._modalStates.length === 0)
-      result.push('- There is no modal state present');
-    for (const state of this._modalStates) {
-      const tool = this.tools.find(tool => tool.clearsModalState === state.type);
-      result.push(`- [${state.description}]: can be handled by the "${tool?.schema.name}" tool`);
-    }
-    return result;
+  static async disposeAll() {
+    await Promise.all([...Context._allContexts].map(context => context.dispose()));
   }
 
   tabs(): Tab[] {
     return this._tabs;
   }
 
+  currentTab(): Tab | undefined {
+    return this._currentTab;
+  }
+
   currentTabOrDie(): Tab {
     if (!this._currentTab)
-      throw new Error('No current snapshot available. Capture a snapshot or navigate to a new location first.');
+      throw new Error('No open pages available. Use the "browser_navigate" tool to navigate to a page first.');
     return this._currentTab;
   }
 
@@ -98,8 +78,12 @@ export class Context {
   }
 
   async selectTab(index: number) {
-    this._currentTab = this._tabs[index];
-    await this._currentTab.page.bringToFront();
+    const tab = this._tabs[index];
+    if (!tab)
+      throw new Error(`Tab ${index} not found`);
+    await tab.page.bringToFront();
+    this._currentTab = tab;
+    return tab;
   }
 
   async ensureTab(): Promise<Tab> {
@@ -109,9 +93,18 @@ export class Context {
     return this._currentTab!;
   }
 
-  async listTabsMarkdown(): Promise<string> {
-    if (!this._tabs.length)
-      return '### No tabs open';
+  async listTabsMarkdown(force: boolean = false): Promise<string[]> {
+    if (this._tabs.length === 1 && !force)
+      return [];
+
+    if (!this._tabs.length) {
+      return [
+        '### Open tabs',
+        'No open tabs. Use the "browser_navigate" tool to navigate to a page first.',
+        '',
+      ];
+    }
+
     const lines: string[] = ['### Open tabs'];
     for (let i = 0; i < this._tabs.length; i++) {
       const tab = this._tabs[i];
@@ -120,158 +113,17 @@ export class Context {
       const current = tab === this._currentTab ? ' (current)' : '';
       lines.push(`- ${i}:${current} [${title}] (${url})`);
     }
-    return lines.join('\n');
+    lines.push('');
+    return lines;
   }
 
-  async closeTab(index: number | undefined) {
+  async closeTab(index: number | undefined): Promise<string> {
     const tab = index === undefined ? this._currentTab : this._tabs[index];
-    await tab?.page.close();
-    return await this.listTabsMarkdown();
-  }
-
-  async run(tool: Tool, params: Record<string, unknown> | undefined) {
-    // Tab management is done outside of the action() call.
-    const toolResult = await tool.handle(this, tool.schema.inputSchema.parse(params || {}));
-    const { code, action, waitForNetwork, captureSnapshot, resultOverride } = toolResult;
-
-    if (resultOverride)
-      return resultOverride;
-
-    if (!this._currentTab) {
-      return {
-        content: [{
-          type: 'text',
-          text: 'No open pages available. Use the "browser_navigate" tool to navigate to a page first.',
-        }],
-      };
-    }
-
-    const tab = this.currentTabOrDie();
-    // TODO: race against modal dialogs to resolve clicks.
-    const actionResult = await this._raceAgainstModalDialogs(async () => {
-      try {
-        if (waitForNetwork)
-          return await waitForCompletion(this, tab, async () => action?.()) ?? undefined;
-        else
-          return await action?.() ?? undefined;
-      } finally {
-        if (captureSnapshot && !this._javaScriptBlocked())
-          await tab.captureSnapshot();
-      }
-    });
-
-    const result: string[] = [];
-    result.push(`### Ran Playwright code
-\`\`\`js
-${code.join('\n')}
-\`\`\``);
-
-    if (this.modalStates().length) {
-      result.push('', ...this.modalStatesMarkdown());
-      return {
-        content: [{
-          type: 'text',
-          text: result.join('\n'),
-        }],
-      };
-    }
-
-    const messages = tab.takeRecentConsoleMessages();
-    if (messages.length) {
-      result.push('', `### New console messages`);
-      for (const message of messages)
-        result.push(`- ${trim(message.toString(), 100)}`);
-    }
-
-    if (this._downloads.length) {
-      result.push('', '### Downloads');
-      for (const entry of this._downloads) {
-        if (entry.finished)
-          result.push(`- Downloaded file ${entry.download.suggestedFilename()} to ${entry.outputFile}`);
-        else
-          result.push(`- Downloading file ${entry.download.suggestedFilename()} ...`);
-      }
-    }
-
-    if (captureSnapshot && tab.hasSnapshot()) {
-      if (this.tabs().length > 1)
-        result.push('', await this.listTabsMarkdown());
-
-      if (this.tabs().length > 1)
-        result.push('', '### Current tab');
-      else
-        result.push('', '### Page state');
-
-      result.push(
-          `- Page URL: ${tab.page.url()}`,
-          `- Page Title: ${await tab.title()}`
-      );
-      result.push(tab.snapshotOrDie().text());
-    }
-
-    const content = actionResult?.content ?? [];
-
-    return {
-      content: [
-        ...content,
-        {
-          type: 'text',
-          text: result.join('\n'),
-        }
-      ],
-    };
-  }
-
-  async waitForTimeout(time: number) {
-    if (!this._currentTab || this._javaScriptBlocked()) {
-      await new Promise(f => setTimeout(f, time));
-      return;
-    }
-
-    await callOnPageNoTrace(this._currentTab.page, page => {
-      return page.evaluate(() => new Promise(f => setTimeout(f, 1000)));
-    });
-  }
-
-  private async _raceAgainstModalDialogs(action: () => Promise<ToolActionResult>): Promise<ToolActionResult> {
-    this._pendingAction = {
-      dialogShown: new ManualPromise(),
-    };
-
-    let result: ToolActionResult | undefined;
-    try {
-      await Promise.race([
-        action().then(r => result = r),
-        this._pendingAction.dialogShown,
-      ]);
-    } finally {
-      this._pendingAction = undefined;
-    }
-    return result;
-  }
-
-  private _javaScriptBlocked(): boolean {
-    return this._modalStates.some(state => state.type === 'dialog');
-  }
-
-  dialogShown(tab: Tab, dialog: playwright.Dialog) {
-    this.setModalState({
-      type: 'dialog',
-      description: `"${dialog.type()}" dialog with message "${dialog.message()}"`,
-      dialog,
-    }, tab);
-    this._pendingAction?.dialogShown.resolve();
-  }
-
-  async downloadStarted(tab: Tab, download: playwright.Download) {
-    const entry = {
-      download,
-      finished: false,
-      outputFile: await outputFile(this.config, download.suggestedFilename())
-    };
-    this._downloads.push(entry);
-    await download.saveAs(entry.outputFile);
-    entry.finished = true;
+    if (!tab)
+      throw new Error(`Tab ${index} not found`);
+    const url = tab.page.url();
+    await tab.page.close();
+    return url;
   }
 
   private _onPageCreated(page: playwright.Page) {
@@ -282,7 +134,6 @@ ${code.join('\n')}
   }
 
   private _onPageClosed(tab: Tab) {
-    this._modalStates = this._modalStates.filter(state => state.tab !== tab);
     const index = this._tabs.indexOf(tab);
     if (index === -1)
       return;
@@ -291,10 +142,21 @@ ${code.join('\n')}
     if (this._currentTab === tab)
       this._currentTab = this._tabs[Math.min(index, this._tabs.length - 1)];
     if (!this._tabs.length)
-      void this.close();
+      void this.closeBrowserContext();
   }
 
-  async close() {
+  async closeBrowserContext() {
+    if (!this._closeBrowserContextPromise)
+      this._closeBrowserContextPromise = this._closeBrowserContextImpl().catch(logUnhandledError);
+    await this._closeBrowserContextPromise;
+    this._closeBrowserContextPromise = undefined;
+  }
+
+  async setInputRecorderEnabled(enabled: boolean) {
+    await this._inputRecorder?.setEnabled(enabled);
+  }
+
+  private async _closeBrowserContextImpl() {
     if (!this._browserContextPromise)
       return;
 
@@ -308,6 +170,11 @@ ${code.join('\n')}
         await browserContext.tracing.stop();
       await close();
     });
+  }
+
+  async dispose() {
+    await this.closeBrowserContext();
+    Context._allContexts.delete(this);
   }
 
   private async _setupRequestInterception(context: playwright.BrowserContext) {
@@ -335,10 +202,14 @@ ${code.join('\n')}
   }
 
   private async _setupBrowserContext(): Promise<{ browserContext: playwright.BrowserContext, close: () => Promise<void> }> {
+    if (this._closeBrowserContextPromise)
+      throw new Error('Another browser context is being closed.');
     // TODO: move to the browser context factory to make it based on isolation mode.
     const result = await this._browserContextFactory.createContext(this.clientVersion!);
     const { browserContext } = result;
     await this._setupRequestInterception(browserContext);
+    if (this._sessionLog)
+      this._inputRecorder = await InputRecorder.create(this._sessionLog, browserContext);
     for (const page of browserContext.pages())
       this._onPageCreated(page);
     browserContext.on('page', page => this._onPageCreated(page));
@@ -354,8 +225,88 @@ ${code.join('\n')}
   }
 }
 
-function trim(text: string, maxLength: number) {
-  if (text.length <= maxLength)
-    return text;
-  return text.slice(0, maxLength) + '...';
+export class InputRecorder {
+  private _actions: Action[] = [];
+  private _enabled = false;
+  private _sessionLog: SessionLog;
+  private _browserContext: playwright.BrowserContext;
+  private _flushTimer: NodeJS.Timeout | undefined;
+
+  private constructor(sessionLog: SessionLog, browserContext: playwright.BrowserContext) {
+    this._sessionLog = sessionLog;
+    this._browserContext = browserContext;
+  }
+
+  static async create(sessionLog: SessionLog, browserContext: playwright.BrowserContext) {
+    const recorder = new InputRecorder(sessionLog, browserContext);
+    await recorder._initialize();
+    await recorder.setEnabled(true);
+    return recorder;
+  }
+
+  private async _initialize() {
+    await (this._browserContext as any)._enableRecorder({
+      mode: 'recording',
+      recorderMode: 'api',
+    }, {
+      actionAdded: (page: playwright.Page, data: actions.ActionInContext, code: string) => {
+        if (!this._enabled)
+          return;
+        const tab = Tab.forPage(page);
+        this._actions.push({ ...data, tab, code: code.trim(), timestamp: performance.now() });
+        this._scheduleFlush();
+      },
+      actionUpdated: (page: playwright.Page, data: actions.ActionInContext, code: string) => {
+        if (!this._enabled)
+          return;
+        const tab = Tab.forPage(page);
+        this._actions[this._actions.length - 1] = { ...data, tab, code: code.trim(), timestamp: performance.now() };
+        this._scheduleFlush();
+      },
+      signalAdded: (page: playwright.Page, data: actions.SignalInContext) => {
+        if (data.signal.name !== 'navigation')
+          return;
+        const tab = Tab.forPage(page);
+        this._actions.push({
+          frame: data.frame,
+          action: {
+            name: 'navigate',
+            url: data.signal.url,
+            signals: [],
+          },
+          startTime: data.timestamp,
+          endTime: data.timestamp,
+          tab,
+          code: `await page.goto('${data.signal.url}');`,
+          timestamp: performance.now(),
+        });
+        this._scheduleFlush();
+      },
+    });
+  }
+
+  async setEnabled(enabled: boolean) {
+    this._enabled = enabled;
+    if (!enabled)
+      await this._flush();
+  }
+
+  private _clearTimer() {
+    if (this._flushTimer) {
+      clearTimeout(this._flushTimer);
+      this._flushTimer = undefined;
+    }
+  }
+
+  private _scheduleFlush() {
+    this._clearTimer();
+    this._flushTimer = setTimeout(() => this._flush(), 1000);
+  }
+
+  private async _flush() {
+    this._clearTimer();
+    const actions = this._actions;
+    this._actions = [];
+    await this._sessionLog.logActions(actions);
+  }
 }

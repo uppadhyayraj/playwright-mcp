@@ -15,13 +15,13 @@
  */
 
 import { z } from 'zod';
-import { defineTool } from './tool.js';
+import { defineTabTool } from './tool.js';
 
 const elementSchema = z.object({
   element: z.string().describe('Human-readable element description used to obtain permission to interact with the element'),
 });
 
-const mouseMove = defineTool({
+const mouseMove = defineTabTool({
   capability: 'vision',
   schema: {
     name: 'browser_mouse_move_xy',
@@ -34,23 +34,17 @@ const mouseMove = defineTool({
     type: 'readOnly',
   },
 
-  handle: async (context, params) => {
-    const tab = context.currentTabOrDie();
-    const code = [
-      `// Move mouse to (${params.x}, ${params.y})`,
-      `await page.mouse.move(${params.x}, ${params.y});`,
-    ];
-    const action = () => tab.page.mouse.move(params.x, params.y);
-    return {
-      code,
-      action,
-      captureSnapshot: false,
-      waitForNetwork: false
-    };
+  handle: async (tab, params, response) => {
+    response.addCode(`// Move mouse to (${params.x}, ${params.y})`);
+    response.addCode(`await page.mouse.move(${params.x}, ${params.y});`);
+
+    await tab.waitForCompletion(async () => {
+      await tab.page.mouse.move(params.x, params.y);
+    });
   },
 });
 
-const mouseClick = defineTool({
+const mouseClick = defineTabTool({
   capability: 'vision',
   schema: {
     name: 'browser_mouse_click_xy',
@@ -63,29 +57,23 @@ const mouseClick = defineTool({
     type: 'destructive',
   },
 
-  handle: async (context, params) => {
-    const tab = context.currentTabOrDie();
-    const code = [
-      `// Click mouse at coordinates (${params.x}, ${params.y})`,
-      `await page.mouse.move(${params.x}, ${params.y});`,
-      `await page.mouse.down();`,
-      `await page.mouse.up();`,
-    ];
-    const action = async () => {
+  handle: async (tab, params, response) => {
+    response.setIncludeSnapshot();
+
+    response.addCode(`// Click mouse at coordinates (${params.x}, ${params.y})`);
+    response.addCode(`await page.mouse.move(${params.x}, ${params.y});`);
+    response.addCode(`await page.mouse.down();`);
+    response.addCode(`await page.mouse.up();`);
+
+    await tab.waitForCompletion(async () => {
       await tab.page.mouse.move(params.x, params.y);
       await tab.page.mouse.down();
       await tab.page.mouse.up();
-    };
-    return {
-      code,
-      action,
-      captureSnapshot: false,
-      waitForNetwork: true,
-    };
+    });
   },
 });
 
-const mouseDrag = defineTool({
+const mouseDrag = defineTabTool({
   capability: 'vision',
   schema: {
     name: 'browser_mouse_drag_xy',
@@ -100,30 +88,21 @@ const mouseDrag = defineTool({
     type: 'destructive',
   },
 
-  handle: async (context, params) => {
-    const tab = context.currentTabOrDie();
+  handle: async (tab, params, response) => {
+    response.setIncludeSnapshot();
 
-    const code = [
-      `// Drag mouse from (${params.startX}, ${params.startY}) to (${params.endX}, ${params.endY})`,
-      `await page.mouse.move(${params.startX}, ${params.startY});`,
-      `await page.mouse.down();`,
-      `await page.mouse.move(${params.endX}, ${params.endY});`,
-      `await page.mouse.up();`,
-    ];
+    response.addCode(`// Drag mouse from (${params.startX}, ${params.startY}) to (${params.endX}, ${params.endY})`);
+    response.addCode(`await page.mouse.move(${params.startX}, ${params.startY});`);
+    response.addCode(`await page.mouse.down();`);
+    response.addCode(`await page.mouse.move(${params.endX}, ${params.endY});`);
+    response.addCode(`await page.mouse.up();`);
 
-    const action = async () => {
+    await tab.waitForCompletion(async () => {
       await tab.page.mouse.move(params.startX, params.startY);
       await tab.page.mouse.down();
       await tab.page.mouse.move(params.endX, params.endY);
       await tab.page.mouse.up();
-    };
-
-    return {
-      code,
-      action,
-      captureSnapshot: false,
-      waitForNetwork: true,
-    };
+    });
   },
 });
 

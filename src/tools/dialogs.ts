@@ -15,9 +15,9 @@
  */
 
 import { z } from 'zod';
-import { defineTool } from './tool.js';
+import { defineTabTool } from './tool.js';
 
-const handleDialog = defineTool({
+const handleDialog = defineTabTool({
   capability: 'core',
 
   schema: {
@@ -31,27 +31,20 @@ const handleDialog = defineTool({
     type: 'destructive',
   },
 
-  handle: async (context, params) => {
-    const dialogState = context.modalStates().find(state => state.type === 'dialog');
+  handle: async (tab, params, response) => {
+    response.setIncludeSnapshot();
+
+    const dialogState = tab.modalStates().find(state => state.type === 'dialog');
     if (!dialogState)
       throw new Error('No dialog visible');
 
-    if (params.accept)
-      await dialogState.dialog.accept(params.promptText);
-    else
-      await dialogState.dialog.dismiss();
-
-    context.clearModalState(dialogState);
-
-    const code = [
-      `// <internal code to handle "${dialogState.dialog.type()}" dialog>`,
-    ];
-
-    return {
-      code,
-      captureSnapshot: true,
-      waitForNetwork: false,
-    };
+    tab.clearModalState(dialogState);
+    await tab.waitForCompletion(async () => {
+      if (params.accept)
+        await dialogState.dialog.accept(params.promptText);
+      else
+        await dialogState.dialog.dismiss();
+    });
   },
 
   clearsModalState: 'dialog',
